@@ -1,0 +1,201 @@
+﻿@page "/"
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Microsoft.FluentUI.AspNetCore.Components.Icons
+@using UPortal.Components.Features.ExternalApplications
+@using UPortal.Data.Models
+@using UPortal.Dtos
+@inject IDialogService DialogService
+@inject IExternalApplicationService ExternalAppService
+@inject IToastService ToastService
+@inject NavigationManager NavigationManager
+@inject ILogger<Home> _logger
+
+<FluentLabel Typo="Typography.Header">Applications Dashboard</FluentLabel>
+
+@if (isAddAppDialogVisible)
+{
+    <FluentDialog TrapFocus="true" Modal="true" PreventScroll="true">
+        <AddExternalApplicationForm ApplicationModel="newApp" OnSave="HandleSaveExternalApp" OnCancel="HandleCancelAddApp" />
+    </FluentDialog>
+}
+
+@if (_applications == null)
+{
+    <p><em>Loading applications...</em></p>
+    <FluentProgressRing />
+}
+else if (!_applications.Any())
+{
+    <p>No external applications have been added yet. Click the "Add Application" button to get started.</p>
+}
+else
+{
+    <FluentGrid Spacing="3">
+        @foreach (var app in _applications)
+        {
+            <FluentGridItem xs="12" sm="6" md="4" lg="3">
+                <div style="position: relative;">
+
+                    <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())"
+                                  Appearance="Appearance.Lightweight"
+                                  OnClick="@(() => OpenDeleteConfirmationDialogAsync(app))"
+                                  Style="position: absolute; top: 5px; right: 5px; z-index: 1; --button-icon-size: 16px; padding: 4px; min-width: auto;"
+                                  Title="Delete Application" />
+                    <FluentCard Height="120px" @onclick="@(() => NavigateToAppView(app.Id))" class="fluent-card">
+                        <FluentIcon Value="@(IconService.GetIcon(app.IconName, IconSize.Size32))" class="fluent-icon" />
+                        <div style="margin-top: 10px;font-weight: 600;">
+                            @app.AppName
+                        </div>
+                    </FluentCard>
+                </div>
+            </FluentGridItem>
+        }
+    </FluentGrid>
+}
+
+<div style="position: fixed; bottom: 60px; right: 20px; z-index: 1000;">
+    <FluentButton IconStart="@(new Icons.Regular.Size24.Add())"
+                  Appearance="Appearance.Accent"
+                  OnClick="OpenAddAppDialog"
+                  Title="Add External Application" />
+</div>
+
+@code {
+    /// <summary>
+    /// List of external applications to display.
+    /// </summary>
+    private List<ExternalApplicationDto> _applications;
+
+    /// <summary>
+    /// Controls the visibility of the 'Add External Application' dialog.
+    /// </summary>
+    private bool isAddAppDialogVisible = false;
+
+    /// <summary>
+    /// Model for a new external application being added via the dialog.
+    /// </summary>
+    private ExternalApplicationDto newApp = new ExternalApplicationDto();
+
+    /// <summary>
+    /// Initializes the component by loading the list of external applications.
+    /// This method is called when the component is first initialized.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        _logger.LogInformation("Home page initializing.");
+        await LoadApplicationsAsync();
+        _logger.LogInformation("Home page initialization completed.");
+    }
+
+    /// <summary>
+    /// Navigates to the view page for a specific application.
+    /// </summary>
+    /// <param name="appId">The ID of the application to view.</param>
+    private void NavigateToAppView(int appId)
+    {
+        NavigationManager.NavigateTo($"/app/{appId}");
+    }
+
+    /// <summary>
+    /// Loads the list of external applications from the service.
+    /// Handles potential errors during loading and updates the UI accordingly.
+    /// </summary>
+    private async Task LoadApplicationsAsync()
+    {
+        _logger.LogInformation("Loading applications.");
+        try
+        {
+            _applications = await ExternalAppService.GetAllAsync();
+            _logger.LogInformation("Successfully loaded {ApplicationCount} applications.", _applications?.Count ?? 0);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading applications: {Message}", ex.Message);
+            ToastService.ShowError("Failed to load applications. Please try refreshing the page.", 7000);
+            _applications = new List<ExternalApplicationDto>(); // Ensure _applications is not null
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Opens the dialog to add a new external application.
+    /// Resets the <see cref="newApp"/> model to ensure a clean form.
+    /// </summary>
+    private void OpenAddAppDialog()
+    {
+        _logger.LogInformation("Opening Add Application dialog.");
+        newApp = new ExternalApplicationDto(); // Reset model for new entry
+        isAddAppDialogVisible = true;
+    }
+
+    /// <summary>
+    /// Handles the saving of a new external application.
+    /// Adds the application via the <see cref="ExternalAppService"/> and updates the UI.
+    /// Shows toast notifications for success or failure.
+    /// </summary>
+    /// <param name="appFromForm">The external application model from the submitted form.</param>
+    private async Task HandleSaveExternalApp(ExternalApplicationDto appFromForm)
+    {
+        _logger.LogInformation("Attempting to save external application: {AppName}", appFromForm.AppName);
+        try
+        {
+            await ExternalAppService.AddAsync(appFromForm);
+            _logger.LogInformation("External application {AppName} saved successfully.", appFromForm.AppName);
+
+            isAddAppDialogVisible = false;
+            await LoadApplicationsAsync(); // Reload applications to show the new one
+            ToastService.ShowSuccess($"Application '{appFromForm.AppName}' added successfully!", 5000);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving external application: {Message}", ex.Message);
+            ToastService.ShowError("Error adding application. Please try again. If the problem persists, note the error details from the logs.", 7000);
+        }
+    }
+
+    /// <summary>
+    /// Handles the cancellation of the 'Add External Application' dialog.
+    /// </summary>
+    private void HandleCancelAddApp()
+    {
+        _logger.LogInformation("Add Application dialog cancelled.");
+        isAddAppDialogVisible = false; // Hide the dialog.
+    }
+
+    /// <summary>
+    /// Opens a confirmation dialog before deleting an external application.
+    /// If confirmed, deletes the application and reloads the list.
+    /// </summary>
+    /// <param name="appToDelete">The application to be deleted.</param>
+    private async Task OpenDeleteConfirmationDialogAsync(ExternalApplicationDto appToDelete)
+    {
+        _logger.LogInformation("Opening delete confirmation dialog for application: {AppName}", appToDelete.AppName);
+        // Show a confirmation dialog to the user.
+        var dialog = await DialogService.ShowConfirmationAsync(
+            $"Are you sure you want to delete '{appToDelete.AppName}'?",
+            "Yes, delete", "No, cancel", "Confirm Deletion");
+
+        var result = await dialog.Result;
+
+        if (!result.Cancelled)
+        {
+            _logger.LogInformation("Delete confirmed for application: {AppName}", appToDelete.AppName);
+            try
+            {
+                await ExternalAppService.DeleteAsync(appToDelete.Id);
+                _logger.LogInformation("Application {AppName} deleted successfully.", appToDelete.AppName);
+                ToastService.ShowSuccess("Application deleted successfully.");
+                await LoadApplicationsAsync(); // Reload applications
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete application {AppName}: {Message}", appToDelete.AppName, ex.Message);
+                ToastService.ShowError($"Failed to delete '{appToDelete.AppName}'. Please try again. If the problem persists, note the error details from the logs.", 7000);
+            }
+        }
+        else
+        {
+            _logger.LogInformation("Delete cancelled for application: {AppName}", appToDelete.AppName);
+        }
+    }
+}

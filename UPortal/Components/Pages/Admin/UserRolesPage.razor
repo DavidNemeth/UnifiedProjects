@@ -1,0 +1,106 @@
+@page "/admin/user-roles"
+@using Microsoft.AspNetCore.Authorization
+@using UPortal.Dtos
+@using UPortal.Services
+@using UPortal.Components.Dialogs
+@using Microsoft.FluentUI.AspNetCore.Components
+@inject IAppUserService AppUserService
+@inject IDialogService DialogService
+@inject IToastService ToastService
+@inject ILogger<UserRolesPage> Logger
+
+@attribute [Authorize(Policy = PermissionPolicies.AssignRoles)]
+
+<PageTitle>User Role Assignments</PageTitle>
+
+<h1>User Role Assignments</h1>
+
+@if (users is null)
+{
+    <FluentProgressRing />
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <FluentDataGrid Pagination="@pagination"
+                    RowSize="@DataGridRowSize.Medium"
+                    Items="@users.AsQueryable()"
+                    GridTemplateColumns="1fr 2fr 2fr auto" TGridItem="AppUserDto">
+        <PropertyColumn Property="@(u => u.Name)" Sortable="true" Title="User Name" />
+        <PropertyColumn Property="@(u => u.AzureAdObjectId)" Sortable="true" Title="Azure AD Object ID" />
+        <TemplateColumn Title="Assigned Roles">
+            @if (context.Roles != null && context.Roles.Any())
+            {
+                @(string.Join(", ", context.Roles.Select(r => r.Name)))
+            }
+            else
+            {
+                <em>No roles assigned</em>
+            }
+        </TemplateColumn>
+        <TemplateColumn Title="Actions" Align="Align.End">
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" OnClick="@(() => OpenEditDialogAsync(context))"></FluentButton>
+        </TemplateColumn>
+    </FluentDataGrid>
+
+    <FluentPaginator State="@pagination" />
+}
+
+@code {
+    private List<AppUserDto> users;
+    private PaginationState pagination = new PaginationState() { ItemsPerPage = 10 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshGridDataAsync();
+    }
+
+    private async Task OpenEditDialogAsync(AppUserDto userToEdit)
+    {
+        var dto = new AssignUserRolesDto
+        {
+            RoleIds = userToEdit.Roles.Select(r => r.Id).ToList()
+        };
+
+        var dialog = await DialogService.ShowDialogAsync<UserRoleAssignmentDialog>(dto, new DialogParameters()
+        {
+            Title = $"Manage Roles for '{userToEdit.Name}'",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,
+            Width = "500px"
+        });
+
+        var result = await dialog.Result;
+
+        if (!result.Cancelled && result.Data is not null)
+        {
+            try
+            {
+                var updatedDto = (AssignUserRolesDto)result.Data;
+                await AppUserService.UpdateUserRolesAsync(userToEdit.Id, updatedDto.RoleIds);
+                ToastService.ShowSuccess($"Roles for '{userToEdit.Name}' updated successfully.");
+                await RefreshGridDataAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error updating user roles for user ID {UserId}.", userToEdit.Id);
+                ToastService.ShowError("Failed to update user roles.");
+            }
+        }
+    }
+
+    private async Task RefreshGridDataAsync()
+    {
+        try
+        {
+            users = await AppUserService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading users.");
+            ToastService.ShowError("Could not load users.");
+            users = new List<AppUserDto>(); // Ensure users is not null.
+        }
+        StateHasChanged();
+    }
+}

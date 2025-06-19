@@ -1,0 +1,89 @@
+@page "/admin/users"
+@inject IAppUserService AppUserService
+@inject IDialogService DialogService
+@inject IToastService ToastService
+@using Microsoft.FluentUI.AspNetCore.Components
+@using UPortal.Dtos
+@using UPortal.Components.Pages.Admin 
+
+@attribute [Authorize(Policy = PermissionPolicies.ManageUsers)]
+
+<PageTitle>Users</PageTitle>
+
+<FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="10">
+    <h1>Users Administration</h1>
+</FluentStack>
+
+@if (users is null)
+{
+    <FluentProgressRing />
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <FluentDataGrid Pagination="@pagination"
+                    RowSize="@DataGridRowSize.Medium"
+                    Items="@users.AsQueryable()"
+                    GridTemplateColumns="0.5fr 2fr 2fr 1fr 1fr 1fr 1fr" TGridItem="AppUserDto">
+        <PropertyColumn Property="@(dto => dto.Id)" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.Name)" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.LocationName)" Title="Location" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.IsActive)" Title="Active" Sortable="true" />
+
+        <TemplateColumn Title="Actions" Align="Align.End">
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit User" OnClick="@(() => OpenEditUserDialogAsync(context))"></FluentButton>
+        </TemplateColumn>
+    </FluentDataGrid>
+
+    <FluentPaginator State="@pagination" />
+}
+
+@code {
+    private List<AppUserDto>? users;
+    private PaginationState pagination = new PaginationState() { ItemsPerPage = 10 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshGridDataAsync();
+    }
+
+    private async Task RefreshGridDataAsync()
+    {
+        users = await AppUserService.GetAllAsync();
+        users = users.OrderBy(u => u.Name).ToList();
+        StateHasChanged();
+    }
+
+    private async Task OpenEditUserDialogAsync(AppUserDto userToEdit)
+    {
+        var userToUpdate = new UpdateAppUserDto
+        {
+            IsActive = userToEdit.IsActive,
+            LocationId = userToEdit.LocationId // Add LocationId
+        };
+
+        var dialog = await DialogService.ShowDialogAsync<AppUserDialog>(userToUpdate, new DialogParameters()
+        {
+            Title = $"Edit User",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true
+        });
+
+        var result = await dialog.Result;
+
+        if (!result.Cancelled && result.Data is not null)
+        {
+            var updatedUser = (UpdateAppUserDto)result.Data;
+            try
+            {
+                await AppUserService.UpdateAppUserAsync(userToEdit.Id, updatedUser);
+                ToastService.ShowSuccess($"User '{userToEdit.Name}' was updated successfully.");
+                await RefreshGridDataAsync();
+            }
+            catch (Exception ex)
+            {
+                ToastService.ShowError($"Failed to update user: {ex.Message}");
+            }
+        }
+    }
+}
