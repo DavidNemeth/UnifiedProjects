@@ -1,0 +1,85 @@
+@page "/manager-dashboard"
+@using USheets.Models
+@using Microsoft.AspNetCore.Authorization
+
+<h3>Manager Dashboard</h3>
+
+<p>Pending Timesheet Approvals</p>
+
+@if (isLoading)
+{
+    <p><em>Loading timesheets...</em></p>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p style="color: red;"><em>Error: @errorMessage</em></p>
+}
+else if (pendingTimesheets == null || !pendingTimesheets.Any())
+{
+    <p><em>No timesheets are currently pending approval.</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Week Start Date</th>
+                <th>Total Hours</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var timesheet in pendingTimesheets)
+            {
+                <tr>
+                    <td>@timesheet.UserId</td> @* Placeholder - needs IUserService integration *@
+                    <td>@timesheet.Date.ToShortDateString()</td>
+                    <td>@timesheet.TotalHours</td>
+                    <td>@timesheet.Status</td>
+                    <td>
+                        @if (timesheet.Status == TimesheetStatus.Submitted)
+                        {
+                            <button class="btn btn-success btn-sm" @onclick="() => ApproveTimesheetClicked(timesheet.Id)">Approve</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => RejectTimesheetClicked(timesheet.Id)">Reject</button>
+                        }
+                    </td>
+                </tr>
+                @if (timesheet.Status == TimesheetStatus.Rejected && !string.IsNullOrWhiteSpace(timesheet.RejectionReason))
+                {
+                    <tr class="table-warning">
+                        <td colspan="5"><em>Rejection Reason: @timesheet.RejectionReason</em></td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@if (showRejectionModal)
+{
+    <div class="modal" tabindex="-1" style="display: block;" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reject Timesheet</h5>
+                    <button type="button" class="btn-close" @onclick="() => CloseRejectionModal()"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Please provide a reason for rejection:</p>
+                    <textarea class="form-control" @bind="rejectionInput" @bind:event="oninput" rows="3"></textarea>
+                    @if (!string.IsNullOrWhiteSpace(rejectionModalErrorMessage))
+                    {
+                        <p class="text-danger">@rejectionModalErrorMessage</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => CloseRejectionModal()">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="() => ConfirmRejectTimesheet()">Confirm Reject</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
