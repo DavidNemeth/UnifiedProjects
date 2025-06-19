@@ -51,7 +51,7 @@ namespace UPortal.Migrations
 
                     b.HasIndex("LocationId");
 
-                    b.ToTable("AppUsers");
+                    b.ToTable("AppUsers", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.ExternalApplication", b =>
@@ -77,7 +77,7 @@ namespace UPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ExternalApplications");
+                    b.ToTable("ExternalApplications", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.Location", b =>
@@ -95,7 +95,7 @@ namespace UPortal.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Locations");
+                    b.ToTable("Locations", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.Machine", b =>
@@ -123,7 +123,7 @@ namespace UPortal.Migrations
 
                     b.HasIndex("LocationId");
 
-                    b.ToTable("Machines");
+                    b.ToTable("Machines", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.Permission", b =>
@@ -144,7 +144,7 @@ namespace UPortal.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Permissions");
+                    b.ToTable("Permissions", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.Role", b =>
@@ -165,7 +165,7 @@ namespace UPortal.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Roles");
+                    b.ToTable("Roles", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.RolePermission", b =>
@@ -180,7 +180,7 @@ namespace UPortal.Migrations
 
                     b.HasIndex("PermissionId");
 
-                    b.ToTable("RolePermissions");
+                    b.ToTable("RolePermissions", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.UserRole", b =>
@@ -195,7 +195,7 @@ namespace UPortal.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("UserRoles");
+                    b.ToTable("UserRoles", (string)null);
                 });
 
             modelBuilder.Entity("UPortal.Data.Models.AppUser", b =>

@@ -74,7 +74,7 @@ namespace USheets.Api.Controllers
             catch (DbUpdateConcurrencyException ex)
             {
                 _logger.LogError(ex, "Concurrency error while approving timesheet entry with id {Id}.", id);
-                return StatusCode(StatusCodes.Status509Conflict, "The timesheet entry was modified by another user. Please reload and try again.");
+                return StatusCode(StatusCodes.Status409Conflict, "The timesheet entry was modified by another user. Please reload and try again.");
             }
             catch (Exception ex)
             {
@@ -120,7 +120,7 @@ namespace USheets.Api.Controllers
             catch (DbUpdateConcurrencyException ex)
             {
                 _logger.LogError(ex, "Concurrency error while rejecting timesheet entry with id {Id}.", id);
-                return StatusCode(StatusCodes.Status509Conflict, "The timesheet entry was modified by another user. Please reload and try again.");
+                return StatusCode(StatusCodes.Status409Conflict, "The timesheet entry was modified by another user. Please reload and try again.");
             }
             catch (Exception ex)
             {
@@ -201,7 +201,7 @@ namespace USheets.Api.Controllers
                 }
                 else
                 {
-                    _logger.LogError(ex, "Concurrency error while updating timesheet entry with id {Id}", id);
+                    _logger.LogError(id, "Concurrency error while updating timesheet entry with id {Id}", id);
                     return StatusCode(StatusCodes.Status500InternalServerError, "Concurrency error");
                 }
             }

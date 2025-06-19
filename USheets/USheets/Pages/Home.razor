@@ -4,28 +4,49 @@
 @using USheets.Services
 @using System.Threading
 @inject ITimesheetService TimesheetService
-@implements IDisposable
 @inject IUserService UserService
+@implements IDisposable
 
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+            My Timesheet
+        </NavLink>
+    </li>
+    
+    <AuthorizeView Roles="Manager">
+        <Authorized>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="manager-dashboard">
+                    Manager Dashboard
+                </NavLink>
+            </li>
+        </Authorized>
+    </AuthorizeView>
+</ul>
+
+    <AuthorizeView>
+        <Authorized>
+            @{
+                var user = context.User;
+                var roleNames = user.FindAll(ClaimTypes.Role).Select(c => c.Value);
+            }
+            <p>Welcome, @user.Identity.Name!</p>
+            <p>Your ID: @user.FindFirst(ClaimTypes.NameIdentifier)?.Value</p>
+            <p>Roles: @string.Join(", ", roleNames)</p>
+            <p>Azure AD Object ID: @user.FindFirst("AzureAdObjectId")?.Value</p>
+        </Authorized>
+        <NotAuthorized>
+            <p>Loading user information or user is not authenticated.</p>
+        </NotAuthorized>
+    </AuthorizeView>
 
 <div class="main-container">
     @if (!string.IsNullOrEmpty(_errorMessage))
-{
-    <p style="color: red;">Error: @_errorMessage</p>
-}
-else if (_currentUser != null)
-{
-    <p>Welcome, @_currentUser.Name!</p>
-    <p>Your ID: @_currentUser.Id</p>
-    <p>Location: @_currentUser.LocationName</p>
-    <p>Roles: @string.Join(", ", _currentUser.RoleNames)</p>
-    <p>Azure AD Object ID: @_currentUser.AzureAdObjectId</p>
-    <p>Is Active: @_currentUser.IsActive</p>
-}
-else
-{
-     <p>Loading user information...</p>
-}
+    {
+        <p style="color: red;">Error: @_errorMessage</p>
+    }
+
          <div class="page-header">
         <h1 class="week-display">@DisplayWeekRange()</h1>
     </div>
@@ -190,20 +211,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            _currentUser = await UserService.GetCurrentUserAsync();
-            if (_currentUser == null)
-            {
-                _errorMessage = "Failed to load user information. The user object is null.";
-            }
-        }
-        catch (Exception ex)
-        {
-             // Log the exception if a logger is available and configured
-            // For now, just set an error message
-            _errorMessage = $"An error occurred while fetching user information: {ex.Message}";
-        }
         InitializePublicHolidays();
         InitializeDebounceTimer(); // Set up the timer
         currentWeekStart = GetStartOfWeek(DateTime.Today);
@@ -526,20 +533,6 @@ else
     }
     private async Task CopyFromPreviousWeek()
     {
-        try
-        {
-            _currentUser = await UserService.GetCurrentUserAsync();
-            if (_currentUser == null)
-            {
-                _errorMessage = "Failed to load user information. The user object is null.";
-            }
-        }
-        catch (Exception ex)
-        {
-             // Log the exception if a logger is available and configured
-            // For now, just set an error message
-            _errorMessage = $"An error occurred while fetching user information: {ex.Message}";
-        }
         DateTime previousWeekStart = currentWeekStart.AddDays(-7);
         weekEntries = await TimesheetService.CopyTimesheetEntriesFromPreviousWeekAsync(currentWeekStart, previousWeekStart);
         if (weekEntries == null) weekEntries = new List<TimesheetEntry>();

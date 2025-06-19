@@ -118,5 +118,20 @@ namespace USheets.Services
             await SaveTimesheetEntriesAsync(currentWeekStartDate, currentWeekEntries);
             return currentWeekEntries;
         }
+
+        public Task<List<TimesheetEntry>?> GetPendingApprovalTimesheetsAsync()
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<TimesheetEntry?> ApproveTimesheetAsync(int timesheetId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<TimesheetEntry?> RejectTimesheetAsync(int timesheetId, string reason)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
