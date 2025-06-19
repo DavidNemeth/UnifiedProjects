@@ -186,7 +186,7 @@ namespace USheets.Pages
     public class TimesheetEntryViewModel
     {
         public int Id { get; set; }
-        public string? UserId { get; set; } // Or EmployeeId/Name if resolved via IUserService
+        public int UserId { get; set; } 
         public string? EmployeeName { get; set; } // To be populated by IUserService
         public DateTime Date { get; set; }
         public double TotalHours { get; set; }

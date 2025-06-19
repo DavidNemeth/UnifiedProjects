@@ -25,7 +25,7 @@ namespace USheets.Models
 
         // --- Core Data Properties for the API ---
         public int Id { get; set; } // Added Id
-        public string? UserId { get; set; } // Added UserId, assuming it will be populated from API
+        public int UserId { get; set; } 
         public DateTime Date { get; set; }
         public string PayCode { get; set; } = "Regular";
         public Dictionary<DayOfWeek, double> Hours { get; set; }

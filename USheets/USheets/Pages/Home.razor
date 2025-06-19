@@ -5,6 +5,7 @@
 @using System.Threading
 @inject ITimesheetService TimesheetService
 @inject IUserService UserService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
 
 <ul class="nav nav-tabs mb-3">
@@ -187,8 +188,10 @@
     private string? errorMessage;
     private DateTime currentWeekStart;
     private DateTime currentWeekEnd;
-    
+
     private UserDto? _currentUser;
+    // Add a field to store the current user's internal ID
+    private int _currentUserId;
     private string _errorMessage = string.Empty;
 
     private DayOfWeek[] daysOfWeek = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
@@ -211,6 +214,19 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out var userId))
+        {
+            _currentUserId = userId;
+        }
+        else
+        {
+            _errorMessage = "Could not identify the current user. Please log in again.";
+            return;
+        }
         InitializePublicHolidays();
         InitializeDebounceTimer(); // Set up the timer
         currentWeekStart = GetStartOfWeek(DateTime.Today);
@@ -230,7 +246,7 @@
             await InvokeAsync(SaveTimesheet);
         }, null, Timeout.Infinite, Timeout.Infinite); // Don't start the timer yet
     }
-    
+
     /// <summary>
     /// Triggers the debouncer to schedule a save operation.
     /// </summary>
@@ -246,38 +262,39 @@
     }
 
     /// <summary>
-    /// The core save method, now with state management and robust error handling.
+    /// The core save method. This is now the single point of responsibility
+    /// for ensuring the correct UserId is assigned to all entries.
     /// </summary>
     private async Task SaveTimesheet()
     {
         if (_isSaving) return; // Prevent concurrent save operations
+        if (weekEntries == null) return; // Nothing to save
 
         _isSaving = true;
 
         try
         {
-            if (weekEntries != null)
+            foreach (var entry in weekEntries)
             {
-                await TimesheetService.SaveTimesheetEntriesAsync(currentWeekStart, weekEntries);
-                
-                // On success, update status with a timestamp
-                _autosaveStatusMessage = $"All changes saved at {DateTime.Now:HH:mm:ss}";
-                _autosaveStatusClass = "status-saved";
-                errorMessage = null; // Clear previous validation errors on a successful save
+                entry.UserId = _currentUserId;
             }
+
+            await TimesheetService.SaveTimesheetEntriesAsync(currentWeekStart, weekEntries);
+        
+            _autosaveStatusMessage = $"All changes saved at {DateTime.Now:HH:mm:ss}";
+            _autosaveStatusClass = "status-saved";
+            errorMessage = null; 
         }
         catch (Exception ex)
         {
-            // If the service throws an exception, catch it and update the UI.
-            Console.WriteLine($"Save failed: {ex}"); // Log full error for debugging
+            Console.WriteLine($"Save failed: {ex}");
             _autosaveStatusMessage = "Error: Failed to save changes.";
             _autosaveStatusClass = "status-error";
-            errorMessage = $"Autosave failed. Please check your connection or entered data. Details: {ex.Message}";
+            errorMessage = $"Autosave failed. Details: {ex.Message}";
         }
         finally
         {
             _isSaving = false;
-            // Ensure the UI is updated with the final status after the save attempt.
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -342,10 +359,15 @@
         if (!string.IsNullOrEmpty(firstAvailablePayCode))
         {
             errorMessage = null;
-            var newEntry = new TimesheetEntry { Date = currentWeekStart, PayCode = firstAvailablePayCode, AutosaveAction = TriggerAutoSave };
+            var newEntry = new TimesheetEntry
+            {
+                Date = currentWeekStart,
+                PayCode = firstAvailablePayCode,
+                AutosaveAction = TriggerAutoSave
+            };
             weekEntries.Add(newEntry);
             UpdateCanAddNewLineState();
-            TriggerAutoSave(); // Save after adding a new line
+            TriggerAutoSave(); 
         }
     }
     

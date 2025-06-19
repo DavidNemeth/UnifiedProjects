@@ -44,7 +44,6 @@ namespace USheets.Api.Controllers
 
         // POST: api/Timesheet/{id}/approve
         [HttpPost("{id}/approve")]
-        [Authorize(Roles = "Manager")]
         public async Task<IActionResult> ApproveTimesheet(int id)
         {
             try
@@ -85,7 +84,6 @@ namespace USheets.Api.Controllers
 
         // POST: api/Timesheet/{id}/reject
         [HttpPost("{id}/reject")]
-        [Authorize(Roles = "Manager")]
         public async Task<IActionResult> RejectTimesheet(int id, [FromBody] RejectionReasonModel rejectionReasonModel)
         {
             if (!ModelState.IsValid)
@@ -131,7 +129,6 @@ namespace USheets.Api.Controllers
 
         // GET: api/Timesheet/pending-approval
         [HttpGet("pending-approval")]
-        [Authorize(Roles = "Manager")]
         public async Task<ActionResult<IEnumerable<TimesheetEntry>>> GetPendingApprovalTimesheets()
         {
             try

@@ -13,6 +13,7 @@ builder.Services.AddHttpClient<ITimesheetService, RestApiTimesheetService>(clien
 {
     client.BaseAddress = new Uri("https://localhost:7198");
 });
+
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 
 builder.Services.AddHttpClient<IUserService, UserService>(client =>
