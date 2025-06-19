@@ -1,11 +1,31 @@
 ﻿@page "/"
+@using USheets.Dtos
 @using USheets.Models
 @using USheets.Services
 @using System.Threading
 @inject ITimesheetService TimesheetService
 @implements IDisposable
+@inject IUserService UserService
+
 
 <div class="main-container">
+    @if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <p style="color: red;">Error: @_errorMessage</p>
+}
+else if (_currentUser != null)
+{
+    <p>Welcome, @_currentUser.Name!</p>
+    <p>Your ID: @_currentUser.Id</p>
+    <p>Location: @_currentUser.LocationName</p>
+    <p>Roles: @string.Join(", ", _currentUser.RoleNames)</p>
+    <p>Azure AD Object ID: @_currentUser.AzureAdObjectId</p>
+    <p>Is Active: @_currentUser.IsActive</p>
+}
+else
+{
+     <p>Loading user information...</p>
+}
          <div class="page-header">
         <h1 class="week-display">@DisplayWeekRange()</h1>
     </div>
@@ -147,6 +167,9 @@
     private DateTime currentWeekStart;
     private DateTime currentWeekEnd;
     
+    private UserDto? _currentUser;
+    private string _errorMessage = string.Empty;
+
     private DayOfWeek[] daysOfWeek = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
     private readonly List<DateTime> publicHolidays = new List<DateTime>();
     private List<string> allPayCodes = new List<string> { PayCodes.Regular, PayCodes.Sick, PayCodes.Overtime };
@@ -167,6 +190,20 @@
 
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            _currentUser = await UserService.GetCurrentUserAsync();
+            if (_currentUser == null)
+            {
+                _errorMessage = "Failed to load user information. The user object is null.";
+            }
+        }
+        catch (Exception ex)
+        {
+             // Log the exception if a logger is available and configured
+            // For now, just set an error message
+            _errorMessage = $"An error occurred while fetching user information: {ex.Message}";
+        }
         InitializePublicHolidays();
         InitializeDebounceTimer(); // Set up the timer
         currentWeekStart = GetStartOfWeek(DateTime.Today);
@@ -489,6 +526,20 @@
     }
     private async Task CopyFromPreviousWeek()
     {
+        try
+        {
+            _currentUser = await UserService.GetCurrentUserAsync();
+            if (_currentUser == null)
+            {
+                _errorMessage = "Failed to load user information. The user object is null.";
+            }
+        }
+        catch (Exception ex)
+        {
+             // Log the exception if a logger is available and configured
+            // For now, just set an error message
+            _errorMessage = $"An error occurred while fetching user information: {ex.Message}";
+        }
         DateTime previousWeekStart = currentWeekStart.AddDays(-7);
         weekEntries = await TimesheetService.CopyTimesheetEntriesFromPreviousWeekAsync(currentWeekStart, previousWeekStart);
         if (weekEntries == null) weekEntries = new List<TimesheetEntry>();

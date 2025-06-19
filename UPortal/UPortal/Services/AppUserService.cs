@@ -63,8 +63,11 @@ namespace UPortal.Services
         {
             _logger.LogInformation("GetByAzureAdObjectIdAsync called with AzureAdObjectId: {AzureAdObjectId}", azureAdObjectId);
             await using var context = await _contextFactory.CreateDbContextAsync();
+            // This query eagerly loads all the necessary related data in a single database round-trip.
             var appUser = await context.AppUsers
-                .Include(u => u.Location)
+                .Include(u => u.Location)       // Include the user's Location entity
+                .Include(u => u.UserRoles)      // Then include the join table entities (UserRole)
+                    .ThenInclude(ur => ur.Role) // And for each of those, include the final Role entity
                 .FirstOrDefaultAsync(u => u.AzureAdObjectId == azureAdObjectId);
 
             if (appUser == null)
@@ -73,6 +76,7 @@ namespace UPortal.Services
                 return null;
             }
 
+            // Map the rich database entity to the lean DTO for the API response.
             var userDto = new AppUserDto
             {
                 Id = appUser.Id,
@@ -80,9 +84,12 @@ namespace UPortal.Services
                 IsActive = appUser.IsActive,
                 AzureAdObjectId = appUser.AzureAdObjectId,
                 LocationId = appUser.LocationId,
-                LocationName = appUser.Location != null ? appUser.Location.Name : string.Empty
+                LocationName = appUser.Location?.Name ?? string.Empty,
+                // This LINQ expression projects the collection of Role entities 
+                // into a simple list of strings containing just their names.
+                RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
             };
-            _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName}", userDto.Name);
+            _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName} with {RoleCount} roles.", userDto.Name, userDto.Roles.Count);
             return userDto;
         }
 
@@ -132,6 +139,15 @@ namespace UPortal.Services
                 else
                 {
                     _logger.LogInformation("User with AzureAdObjectId: {AzureAdObjectId} found with Id: {UserId}. Verifying if update is needed.", azureAdObjectId, appUser.Id);
+
+                    // Check if the name from the token is different from the name in the database.
+                    if (appUser.Name != name)
+                    {
+                        _logger.LogInformation("User's name has changed from '{OldName}' to '{NewName}'. Updating.", appUser.Name, name);
+                        appUser.Name = name; // Update the name property
+                        await context.SaveChangesAsync(); // Save the change to the database
+                        _logger.LogInformation("User's name updated successfully.");
+                    }
                 }
 
                 if (appUser.LocationId != 0 && appUser.Location == null)

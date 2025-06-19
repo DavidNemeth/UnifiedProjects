@@ -39,6 +39,11 @@
         /// Gets or sets the roles assigned to the user.
         /// </summary>
         public List<RoleDto> Roles { get; set; } = new List<RoleDto>();
+
+        /// <summary>   
+        /// Gets or sets the list of role names assigned to the user.
+        /// </summary>
+        public List<string> RoleNames { get; set; } = new List<string>();
     }
 
     /// <summary>

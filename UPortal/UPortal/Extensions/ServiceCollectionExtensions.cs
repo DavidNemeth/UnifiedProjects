@@ -34,8 +34,19 @@ public static class ServiceCollectionExtensions
             options.Cookie.Name = ".Auth.UPortal";
             options.Cookie.HttpOnly = true;
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-            options.Cookie.SameSite = SameSiteMode.Lax;
-            options.Cookie.Domain = configuration["CookieSettings:Domain"];
+            options.Cookie.SameSite = SameSiteMode.None;           
+
+            // It will now correctly trigger a 401 if a request somehow gets through unauthenticated.
+            options.Events.OnRedirectToLogin = context =>
+            {
+                if (context.Request.Path.StartsWithSegments("/api"))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            };
         });
 
         // Configure Data Protection to persist keys
@@ -175,7 +186,15 @@ public static class ServiceCollectionExtensions
                 string[] allowedOrigins;
                 if (environment.IsDevelopment())
                 {
-                    allowedOrigins = new[] { "https://dev.uportal.local:7293", "http://dev.uportal.local:5053" };
+                    allowedOrigins = new[] { "https://dev.uportal.local:7293", 
+                        "http://dev.uportal.local:5053", 
+                        "https://localhost:7071",
+                        "https://localhost:7070",
+                        "http://localhost:5001",
+                        "https://localhost:7240",
+                        "https://dev.usheet.local:7071",
+                        "https://dev.usheet.local:7070",
+                        "http://dev.usheet.local" };
                 }
                 else
                 {
