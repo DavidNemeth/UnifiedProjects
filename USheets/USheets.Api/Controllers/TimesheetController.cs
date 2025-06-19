@@ -1,4 +1,5 @@
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using USheets.Api.Data;
@@ -11,10 +12,12 @@ namespace USheets.Api.Controllers
     public class TimesheetController : ControllerBase
     {
         private readonly ApiDbContext _context;
+        private readonly ILogger<TimesheetController> _logger;
 
-        public TimesheetController(ApiDbContext context)
+        public TimesheetController(ApiDbContext context, ILogger<TimesheetController> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         // GET: api/Timesheet?weekStartDate=YYYY-MM-DD
@@ -34,8 +37,121 @@ namespace USheets.Api.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception (not implemented here for brevity)
+                _logger.LogError(ex, "Error retrieving timesheet entries for week {WeekStartDate}", weekStartDate);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error retrieving data from the database");
+            }
+        }
+
+        // POST: api/Timesheet/{id}/approve
+        [HttpPost("{id}/approve")]
+        [Authorize(Roles = "Manager")]
+        public async Task<IActionResult> ApproveTimesheet(int id)
+        {
+            try
+            {
+                var timesheetEntry = await _context.TimesheetEntries.FindAsync(id);
+
+                if (timesheetEntry == null)
+                {
+                    _logger.LogWarning("Approve failed: Timesheet entry with id {Id} not found.", id);
+                    return NotFound($"Timesheet entry with id {id} not found.");
+                }
+
+                if (timesheetEntry.Status != TimesheetStatus.Submitted)
+                {
+                    _logger.LogWarning("Approve failed: Timesheet entry with id {Id} is not in 'Submitted' state. Current state: {Status}", id, timesheetEntry.Status);
+                    return BadRequest($"Timesheet entry with id {id} cannot be approved because its status is '{timesheetEntry.Status}'. Only submitted timesheets can be approved.");
+                }
+
+                timesheetEntry.Status = TimesheetStatus.Approved;
+                timesheetEntry.RejectionReason = null; // Clear any previous rejection reason
+                _context.Entry(timesheetEntry).State = EntityState.Modified;
+
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Timesheet entry with id {Id} approved successfully.", id);
+                return Ok(timesheetEntry);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogError(ex, "Concurrency error while approving timesheet entry with id {Id}.", id);
+                return StatusCode(StatusCodes.Status509Conflict, "The timesheet entry was modified by another user. Please reload and try again.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error approving timesheet entry with id {Id}.", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error approving timesheet entry.");
+            }
+        }
+
+        // POST: api/Timesheet/{id}/reject
+        [HttpPost("{id}/reject")]
+        [Authorize(Roles = "Manager")]
+        public async Task<IActionResult> RejectTimesheet(int id, [FromBody] RejectionReasonModel rejectionReasonModel)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            try
+            {
+                var timesheetEntry = await _context.TimesheetEntries.FindAsync(id);
+
+                if (timesheetEntry == null)
+                {
+                    _logger.LogWarning("Reject failed: Timesheet entry with id {Id} not found.", id);
+                    return NotFound($"Timesheet entry with id {id} not found.");
+                }
+
+                if (timesheetEntry.Status != TimesheetStatus.Submitted)
+                {
+                    _logger.LogWarning("Reject failed: Timesheet entry with id {Id} is not in 'Submitted' state. Current state: {Status}", id, timesheetEntry.Status);
+                    return BadRequest($"Timesheet entry with id {id} cannot be rejected because its status is '{timesheetEntry.Status}'. Only submitted timesheets can be rejected.");
+                }
+
+                timesheetEntry.Status = TimesheetStatus.Rejected;
+                timesheetEntry.RejectionReason = rejectionReasonModel.Reason;
+                _context.Entry(timesheetEntry).State = EntityState.Modified;
+
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Timesheet entry with id {Id} rejected successfully with reason: {Reason}", id, rejectionReasonModel.Reason);
+                return Ok(timesheetEntry);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogError(ex, "Concurrency error while rejecting timesheet entry with id {Id}.", id);
+                return StatusCode(StatusCodes.Status509Conflict, "The timesheet entry was modified by another user. Please reload and try again.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error rejecting timesheet entry with id {Id}.", id);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error rejecting timesheet entry.");
+            }
+        }
+
+        // GET: api/Timesheet/pending-approval
+        [HttpGet("pending-approval")]
+        [Authorize(Roles = "Manager")]
+        public async Task<ActionResult<IEnumerable<TimesheetEntry>>> GetPendingApprovalTimesheets()
+        {
+            try
+            {
+                var pendingEntries = await _context.TimesheetEntries
+                                                   .Where(e => e.Status == TimesheetStatus.Submitted)
+                                                   .ToListAsync();
+
+                if (!pendingEntries.Any())
+                {
+                    _logger.LogInformation("No timesheets found with status 'Submitted'.");
+                    return Ok(new List<TimesheetEntry>()); // Return empty list, not NotFound
+                }
+
+                return Ok(pendingEntries);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving pending approval timesheets.");
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error retrieving data for pending approvals");
             }
         }
 
@@ -56,7 +172,7 @@ namespace USheets.Api.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception
+                _logger.LogError(ex, "Error retrieving timesheet entry with id {Id}", id);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error retrieving data");
             }
         }
@@ -85,13 +201,13 @@ namespace USheets.Api.Controllers
                 }
                 else
                 {
-                    // Log the exception
+                    _logger.LogError(ex, "Concurrency error while updating timesheet entry with id {Id}", id);
                     return StatusCode(StatusCodes.Status500InternalServerError, "Concurrency error");
                 }
             }
             catch (Exception ex)
             {
-                // Log the exception
+                _logger.LogError(ex, "Error updating timesheet entry with id {Id}", id);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error saving data");
             }
 
@@ -117,7 +233,7 @@ namespace USheets.Api.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception
+                _logger.LogError(ex, "Error creating new timesheet entry.");
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error saving data");
             }
         }
@@ -170,7 +286,7 @@ namespace USheets.Api.Controllers
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                // Log the exception
+                _logger.LogError(ex, "Error saving multiple timesheet entries for week {WeekStartDate}", weekStartDate);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error saving multiple entries.");
             }
         }
@@ -236,7 +352,7 @@ namespace USheets.Api.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception
+                _logger.LogError(ex, "Error copying timesheet entries from {PreviousWeekStartDate} to {CurrentWeekStartDate}", previousWeekStartDate, currentWeekStartDate);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error copying timesheet entries.");
             }
         }
@@ -261,7 +377,7 @@ namespace USheets.Api.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception
+                _logger.LogError(ex, "Error deleting timesheet entry with id {Id}", id);
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error deleting data");
             }
         }

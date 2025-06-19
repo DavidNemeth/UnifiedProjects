@@ -24,10 +24,13 @@ namespace USheets.Models
         public double OvertimeHours { get; set; }
 
         // --- Core Data Properties for the API ---
+        public int Id { get; set; } // Added Id
+        public string? UserId { get; set; } // Added UserId, assuming it will be populated from API
         public DateTime Date { get; set; }
         public string PayCode { get; set; } = "Regular";
         public Dictionary<DayOfWeek, double> Hours { get; set; }
         public TimesheetStatus Status { get; set; }
+        public string? RejectionReason { get; set; }
 
         private string _comments = string.Empty;
         public string Comments

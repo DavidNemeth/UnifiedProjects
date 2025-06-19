@@ -109,6 +109,34 @@ namespace USheets.Services
                 "copying timesheet entries"
             );
         }
+
+        public async Task<List<TimesheetEntry>?> GetPendingApprovalTimesheetsAsync()
+        {
+            var requestUrl = "/api/Timesheet/pending-approval";
+            return await ExecuteRequestAsync<List<TimesheetEntry>?>(
+                () => _httpClient.GetAsync(requestUrl),
+                "fetching pending approval timesheets"
+            );
+        }
+
+        public async Task<TimesheetEntry?> ApproveTimesheetAsync(int timesheetId)
+        {
+            var requestUrl = $"/api/Timesheet/{timesheetId}/approve";
+            return await ExecuteRequestAsync<TimesheetEntry?>(
+                () => _httpClient.PostAsync(requestUrl, null), // No body needed for approval
+                $"approving timesheet with ID {timesheetId}"
+            );
+        }
+
+        public async Task<TimesheetEntry?> RejectTimesheetAsync(int timesheetId, string reason)
+        {
+            var requestUrl = $"/api/Timesheet/{timesheetId}/reject";
+            var payload = new { Reason = reason }; // Matches RejectionReasonModel on API
+            return await ExecuteRequestAsync<TimesheetEntry?>(
+                () => _httpClient.PostAsJsonAsync(requestUrl, payload),
+                $"rejecting timesheet with ID {timesheetId}"
+            );
+        }
     }
 
     public class TimesheetServiceException : Exception

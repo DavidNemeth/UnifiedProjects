@@ -86,7 +86,8 @@ namespace UPortal.Data
                     "ViewDashboard",
                     "ManageMachines", "ViewMachines",
                     "ManageLocations", "ViewLocations",
-                    "ManageExternalApplications", "ViewExternalApplications"
+                    "ManageExternalApplications", "ViewExternalApplications",
+                    "ViewTimesheets", "ManageTimesheets"
                 };
 
                 logger.LogInformation("Seeding Permissions...");
@@ -134,6 +135,43 @@ namespace UPortal.Data
                     await context.SaveChangesAsync();
                 }
                 logger.LogInformation("Admin role permission assignment complete. {AssignedCount} new permissions assigned.", assignedCount);
+
+                // --- SEED "MANAGER" ROLE ---
+                logger.LogInformation("Seeding Manager Role...");
+                var managerRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "Manager");
+                if (managerRole == null)
+                {
+                    managerRole = new Role { Name = "Manager" };
+                    context.Roles.Add(managerRole);
+                    await context.SaveChangesAsync(); // Save to get managerRole.Id
+                    logger.LogInformation("Created 'Manager' role with Id: {RoleId}.", managerRole.Id);
+                }
+                else
+                {
+                    logger.LogInformation("'Manager' role already exists with Id: {RoleId}.", managerRole.Id);
+                }
+
+                // --- ASSIGN SPECIFIC PERMISSIONS TO "MANAGER" ROLE ---
+                logger.LogInformation("Assigning permissions to Manager Role (Id: {RoleId})...", managerRole.Id);
+                var managerPermissionsNames = new List<string> { "ViewTimesheets", "ManageTimesheets" };
+                var managerPermissions = await context.Permissions
+                                                    .Where(p => managerPermissionsNames.Contains(p.Name))
+                                                    .ToListAsync();
+                int managerAssignedCount = 0;
+                foreach (var permission in managerPermissions)
+                {
+                    if (!await context.RolePermissions.AnyAsync(rp => rp.RoleId == managerRole.Id && rp.PermissionId == permission.Id))
+                    {
+                        context.RolePermissions.Add(new RolePermission { RoleId = managerRole.Id, PermissionId = permission.Id });
+                        logger.LogInformation("Assigned permission '{PermissionName}' (Id: {PermissionId}) to 'Manager' role.", permission.Name, permission.Id);
+                        managerAssignedCount++;
+                    }
+                }
+                if (managerAssignedCount > 0)
+                {
+                    await context.SaveChangesAsync();
+                }
+                logger.LogInformation("Manager role permission assignment complete. {AssignedCount} new permissions assigned.", managerAssignedCount);
 
                 // --- ASSIGN "ADMIN" ROLE TO AN INITIAL ADMIN USER (FROM CONFIGURATION) ---
                 var adminUserAzureAdObjectId = configuration["AdminUserAzureAdObjectId"];

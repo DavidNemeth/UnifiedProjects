@@ -13,5 +13,6 @@ namespace USheets.Api.Models
         public string? Comments { get; set; }
         public TimesheetStatus Status { get; set; }
         public double TotalHours { get; set; }
+        public string? RejectionReason { get; set; } // Added for rejection details
     }
 }
