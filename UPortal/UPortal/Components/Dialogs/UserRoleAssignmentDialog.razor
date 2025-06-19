@@ -1,0 +1,89 @@
+@using UPortal.Dtos
+@using UPortal.Services
+@using Microsoft.FluentUI.AspNetCore.Components
+@implements IDialogContentComponent<AssignUserRolesDto>
+@inject IRoleService RoleService
+@inject IToastService ToastService
+@inject ILogger<AssignUserRolesDto> _logger
+
+@if (Content is not null)
+{
+    <FluentDialogHeader ShowDismiss="true">
+        <FluentStack>
+            <FluentIcon Value="@(new Icons.Regular.Size24.PersonArrowRight())" />
+            <FluentLabel Typo="Typography.PaneHeader">
+                @Dialog.Instance.Parameters.Title
+            </FluentLabel>
+        </FluentStack>
+    </FluentDialogHeader>
+
+    <FluentDialogBody>
+        @if (allRoles is not null)
+        {
+            <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--neutral-stroke-rest); padding: 10px;">
+                @foreach (var role in allRoles)
+                {
+                    <div>
+                        <FluentCheckbox Label="@role.Name"
+                                        Value="@roleSelection[role.Id]"
+                                        ValueChanged="@((newValue) => roleSelection[role.Id] = newValue)" />
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <FluentProgressRing />
+            <p><em>Loading roles...</em></p>
+        }
+    </FluentDialogBody>
+
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" OnClick="@CancelAsync">Cancel</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" OnClick="@SaveAsync">Save Roles</FluentButton>
+    </FluentDialogFooter>
+}
+
+@code {
+    private List<RoleDto> allRoles;
+    private Dictionary<int, bool> roleSelection = new();
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Parameter]
+    public AssignUserRolesDto Content { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            allRoles = await RoleService.GetAllRolesAsync();
+            foreach (var role in allRoles)
+            {
+                roleSelection[role.Id] = Content.RoleIds?.Contains(role.Id) ?? false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching roles for UserRoleAssignmentDialog: {Message}", ex.Message);
+            ToastService.ShowError("Error loading roles. Please close and try again.", 7000);
+            allRoles ??= new List<RoleDto>();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        Content.RoleIds = roleSelection
+            .Where(kv => kv.Value)
+            .Select(kv => kv.Key)
+            .ToList();
+
+        await Dialog.CloseAsync(Content);
+    }
+
+    private async Task CancelAsync()
+    {
+        await Dialog.CancelAsync();
+    }
+}

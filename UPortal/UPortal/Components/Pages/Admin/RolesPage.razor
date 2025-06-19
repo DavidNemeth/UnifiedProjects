@@ -1,0 +1,168 @@
+@page "/admin/roles"
+@using UPortal.Dtos
+@using UPortal.Services
+@using UPortal.Components.Dialogs
+@using Microsoft.FluentUI.AspNetCore.Components
+@inject IRoleService RoleService
+@inject IDialogService DialogService
+@inject IToastService ToastService
+@inject ILogger<RolesPage> Logger
+
+@attribute [Authorize(Policy = PermissionPolicies.ManageRoles)]
+
+<PageTitle>Roles</PageTitle>
+
+<FluentStack VerticalAlignment="VerticalAlignment.Center"
+             HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+    <h1>Roles</h1>
+    <FluentButton IconStart="@(new Icons.Regular.Size20.Add())" Appearance="Appearance.Accent" OnClick="@OpenAddDialogAsync">
+    </FluentButton>
+</FluentStack>
+
+@if (roles is null)
+{
+    <FluentProgressRing />
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <FluentDataGrid Pagination="@pagination"
+                    RowSize="@DataGridRowSize.Medium"
+                    Items="@roles.AsQueryable()"
+                    GridTemplateColumns="1fr 2fr auto" TGridItem="RoleDto">
+        <PropertyColumn Property="@(r => r.Name)" Sortable="true" Title="Role Name" />
+        <TemplateColumn Title="Permissions">
+            @if (context.Permissions != null && context.Permissions.Any())
+            {
+                @(string.Join(", ", context.Permissions.Select(p => p.Name)))
+            }
+            else
+            {
+                <em>No permissions assigned</em>
+            }
+        </TemplateColumn>
+        <TemplateColumn Title="Actions" Align="Align.End">
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" OnClick="@(() => OpenEditDialogAsync(context))"></FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Appearance="Appearance.Stealth" OnClick="@(() => ConfirmDeleteAsync(context))"></FluentButton>
+        </TemplateColumn>
+    </FluentDataGrid>
+
+    <FluentPaginator State="@pagination" />
+}
+
+
+@code {
+    private List<RoleDto> roles;
+    private PaginationState pagination = new PaginationState() { ItemsPerPage = 10 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshGridDataAsync();
+    }
+
+    private async Task OpenAddDialogAsync()
+    {
+        var dialog = await DialogService.ShowDialogAsync<RoleDialog>(new CreateRoleDto(), new DialogParameters()
+        {
+            Title = "Add New Role",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,
+            Width = "500px"
+        });
+
+        var result = await dialog.Result;
+
+        if (!result.Cancelled && result.Data is not null)
+        {
+            try
+            {
+                var newRoleDto = (CreateRoleDto)result.Data;
+                await RoleService.CreateRoleAsync(newRoleDto);
+                ToastService.ShowSuccess("Role created successfully.");
+                await RefreshGridDataAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error creating role.");
+                ToastService.ShowError("Failed to create role.");
+            }
+        }
+    }
+
+    private async Task OpenEditDialogAsync(RoleDto roleToEdit)
+    {
+        // For editing, we create a DTO that includes the necessary data for the dialog.
+        var dto = new CreateRoleDto
+        {
+            Name = roleToEdit.Name,
+            PermissionIds = roleToEdit.Permissions.Select(p => p.Id).ToList()
+        };
+
+        var dialog = await DialogService.ShowDialogAsync<RoleDialog>(dto, new DialogParameters()
+        {
+            Title = $"Edit '{roleToEdit.Name}'",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,
+            Width = "500px"
+        });
+
+        var result = await dialog.Result;
+
+        if (!result.Cancelled && result.Data is not null)
+        {
+            try
+            {
+                var updatedDto = (CreateRoleDto)result.Data;
+                // The DTO from the dialog is technically a RoleUpdateDto.
+                var updatePayload = new RoleUpdateDto { Name = updatedDto.Name, PermissionIds = updatedDto.PermissionIds };
+                await RoleService.UpdateRoleAsync(roleToEdit.Id, updatePayload);
+                ToastService.ShowSuccess("Role updated successfully.");
+                await RefreshGridDataAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error updating role.");
+                ToastService.ShowError("Failed to update role.");
+            }
+        }
+    }
+
+    private async Task ConfirmDeleteAsync(RoleDto roleToDelete)
+    {
+        var dialog = await DialogService.ShowConfirmationAsync(
+            $"Are you sure you want to delete '{roleToDelete.Name}'?",
+            "Yes, delete", "No, cancel", "Confirm Deletion");
+
+        var result = await dialog.Result;
+
+        if (!result.Cancelled)
+        {
+            try
+            {
+                await RoleService.DeleteRoleAsync(roleToDelete.Id);
+                ToastService.ShowSuccess("Role deleted successfully.");
+                await RefreshGridDataAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting role.");
+                ToastService.ShowError("Failed to delete role.");
+            }
+        }
+    }
+
+    private async Task RefreshGridDataAsync()
+    {
+        try
+        {
+            roles = await RoleService.GetAllRolesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading roles.");
+            ToastService.ShowError("Could not load roles.");
+            roles = new List<RoleDto>(); // Ensure roles is not null.
+        }
+        StateHasChanged();
+    }
+}
