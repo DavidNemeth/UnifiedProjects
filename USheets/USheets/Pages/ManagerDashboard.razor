@@ -4,28 +4,30 @@
 
 @attribute [Authorize(Roles = "Manager")]
 
-<h3>Manager Dashboard</h3>
-
-<p>Pending Timesheet Approvals</p>
+<div class="page-header">
+    <h3>Manager Dashboard</h3>
+    <p>Pending Timesheet Approvals</p>
+</div>
 
 @if (isLoading)
 {
-    <p><em>Loading timesheets...</em></p>
+    <p class="loading-message"><em>Loading timesheets...</em></p>
 }
 else if (!string.IsNullOrEmpty(errorMessage))
 {
-    <p style="color: red;"><em>Error: @errorMessage</em></p>
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
 }
 else if (pendingTimesheets == null || !pendingTimesheets.Any())
 {
-    <p><em>No timesheets are currently pending approval.</em></p>
+    <p class="no-data-message"><em>No timesheets are currently pending approval.</em></p>
 }
 else
 {
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Employee</th>
+    <div class="table-responsive-container">
+        <table class="timesheet-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
                 <th>Week Start Date</th>
                 <th>Total Hours</th>
                 <th>Status</th>
@@ -66,19 +68,19 @@ else
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Reject Timesheet</h5>
-                    <button type="button" class="btn-close" @onclick="() => CloseRejectionModal()"></button>
+                    <button type="button" class="btn-close" aria-label="Close" @onclick="() => CloseRejectionModal()"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Please provide a reason for rejection:</p>
-                    <textarea class="form-control" @bind="rejectionInput" @bind:event="oninput" rows="3"></textarea>
+                    <label for="rejectionReason" class="form-label">Reason for rejection:</label>
+                    <textarea id="rejectionReason" class="form-control" @bind="rejectionInput" @bind:event="oninput" rows="3" placeholder="Enter reason..."></textarea>
                     @if (!string.IsNullOrWhiteSpace(rejectionModalErrorMessage))
                     {
-                        <p class="text-danger">@rejectionModalErrorMessage</p>
+                        <div class="text-danger mt-2">@rejectionModalErrorMessage</div>
                     }
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="() => CloseRejectionModal()">Cancel</button>
-                    <button type="button" class="btn btn-danger" @onclick="() => ConfirmRejectTimesheet()">Confirm Reject</button>
+                    <button type="button" class="btn btn-secondary" @onclick="() => CloseRejectionModal()">Cancel</button> <!-- Assuming btn-secondary is now gray -->
+                    <button type="button" class="btn btn-danger" @onclick="() => ConfirmRejectTimesheet()">Confirm Reject</button> <!-- Assuming btn-danger is red -->
                 </div>
             </div>
         </div>

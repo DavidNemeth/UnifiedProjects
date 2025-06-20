@@ -8,12 +8,14 @@ using USheets.Api.Controllers;
 using USheets.Api.Data;
 using USheets.Api.Models;
 using Xunit;
+using Microsoft.Extensions.Logging;
+using Moq;
 
 namespace USheets.Api.Tests
 {
     public class TimesheetControllerTests
     {
-        private DbContextOptions<ApiDbContext> _dbContextOptions;
+        private readonly DbContextOptions<ApiDbContext> _dbContextOptions;
 
         public TimesheetControllerTests()
         {
@@ -24,7 +26,12 @@ namespace USheets.Api.Tests
 
         private ApiDbContext CreateContext() => new ApiDbContext(_dbContextOptions);
 
-        private TimesheetController CreateController(ApiDbContext context) => new TimesheetController(context);
+        // Updated CreateController to include a mock logger by default
+        private TimesheetController CreateController(ApiDbContext context, ILogger<TimesheetController> logger = null)
+        {
+            var mockLogger = logger ?? new Mock<ILogger<TimesheetController>>().Object;
+            return new TimesheetController(context, mockLogger);
+        }
 
         [Fact]
         public async Task GetTimesheetEntries_ReturnsEmptyList_WhenNoEntriesForWeek()
@@ -186,6 +193,167 @@ namespace USheets.Api.Tests
             // Assert
             Assert.NotNull(result);
             Assert.IsType<NotFoundObjectResult>(result.Result);
+        }
+
+        // --- Tests for Deleting All Timesheet Lines ---
+        [Fact]
+        public async Task PostTimesheetEntries_WithEmptyList_DeletesExistingEntriesAndReturnsOk()
+        {
+            // Arrange
+            using var context = CreateContext();
+            var weekStartDate = new DateTime(2024, 3, 4); // Example date
+            var existingEntries = new List<TimesheetEntry>
+            {
+                new TimesheetEntry { Id = 1, Date = weekStartDate, ProjectName = "Project X", TotalHours = 8, Status = TimesheetStatus.Draft },
+                new TimesheetEntry { Id = 2, Date = weekStartDate, ProjectName = "Project Y", TotalHours = 4, Status = TimesheetStatus.Draft }
+            };
+            context.TimesheetEntries.AddRange(existingEntries);
+            await context.SaveChangesAsync();
+
+            var controller = CreateController(context);
+
+            // Act
+            var result = await controller.PostTimesheetEntries(weekStartDate, new List<TimesheetEntry>());
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result.Result);
+            var returnedEntries = Assert.IsAssignableFrom<List<TimesheetEntry>>(okResult.Value);
+            Assert.Empty(returnedEntries);
+
+            var dbEntries = await context.TimesheetEntries.Where(e => e.Date.Date == weekStartDate.Date).ToListAsync();
+            Assert.Empty(dbEntries);
+        }
+
+        // --- Tests for Uneditable Approved/Submitted Timesheets ---
+
+        [Fact]
+        public async Task PostTimesheetEntries_WhenWeekIsApproved_ReturnsBadRequest()
+        {
+            // Arrange
+            using var context = CreateContext();
+            var weekStartDate = new DateTime(2024, 3, 11);
+            context.TimesheetEntries.Add(new TimesheetEntry { Id = 1, Date = weekStartDate, ProjectName = "Approved Project", TotalHours = 8, Status = TimesheetStatus.Approved });
+            await context.SaveChangesAsync();
+
+            var controller = CreateController(context);
+            var newEntries = new List<TimesheetEntry> { new TimesheetEntry { Date = weekStartDate, ProjectName = "New Data" } };
+
+            // Act
+            var result = await controller.PostTimesheetEntries(weekStartDate, newEntries);
+
+            // Assert
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Equal("Approved or Submitted timesheets cannot be modified.", badRequestResult.Value);
+        }
+
+        [Fact]
+        public async Task PostTimesheetEntries_WhenWeekIsSubmitted_ReturnsBadRequest()
+        {
+            // Arrange
+            using var context = CreateContext();
+            var weekStartDate = new DateTime(2024, 3, 18);
+            context.TimesheetEntries.Add(new TimesheetEntry { Id = 1, Date = weekStartDate, ProjectName = "Submitted Project", TotalHours = 8, Status = TimesheetStatus.Submitted });
+            await context.SaveChangesAsync();
+
+            var controller = CreateController(context);
+            var newEntries = new List<TimesheetEntry> { new TimesheetEntry { Date = weekStartDate, ProjectName = "New Data" } };
+
+            // Act
+            var result = await controller.PostTimesheetEntries(weekStartDate, newEntries);
+
+            // Assert
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Equal("Approved or Submitted timesheets cannot be modified.", badRequestResult.Value);
+        }
+
+        [Fact]
+        public async Task PutTimesheetEntry_WhenEntryIsApproved_ReturnsBadRequest()
+        {
+            // Arrange
+            using var context = CreateContext();
+            var entryId = 1;
+            var entryDate = new DateTime(2024, 3, 25);
+            context.TimesheetEntries.Add(new TimesheetEntry { Id = entryId, Date = entryDate, ProjectName = "Approved Entry", TotalHours = 8, Status = TimesheetStatus.Approved });
+            await context.SaveChangesAsync();
+            // Detach to avoid tracking issues when AsNoTracking is used in controller and then we try to update
+            var existingEntry = context.TimesheetEntries.Local.Single(e => e.Id == entryId);
+            context.Entry(existingEntry).State = EntityState.Detached;
+
+
+            var controller = CreateController(context);
+            var updatedEntry = new TimesheetEntry { Id = entryId, Date = entryDate, ProjectName = "Updated Name", TotalHours = 9, Status = TimesheetStatus.Approved };
+
+
+            // Act
+            var result = await controller.PutTimesheetEntry(entryId, updatedEntry);
+
+            // Assert
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Equal("Approved or Submitted timesheets cannot be modified.", badRequestResult.Value);
+        }
+
+        [Fact]
+        public async Task PutTimesheetEntry_WhenEntryIsSubmitted_ReturnsBadRequest()
+        {
+            // Arrange
+            using var context = CreateContext();
+            var entryId = 1;
+            var entryDate = new DateTime(2024, 4, 1);
+            context.TimesheetEntries.Add(new TimesheetEntry { Id = entryId, Date = entryDate, ProjectName = "Submitted Entry", TotalHours = 8, Status = TimesheetStatus.Submitted });
+            await context.SaveChangesAsync();
+            var existingEntry = context.TimesheetEntries.Local.Single(e => e.Id == entryId);
+            context.Entry(existingEntry).State = EntityState.Detached;
+
+
+            var controller = CreateController(context);
+            var updatedEntry = new TimesheetEntry { Id = entryId, Date = entryDate, ProjectName = "Updated Name", TotalHours = 9, Status = TimesheetStatus.Submitted };
+
+            // Act
+            var result = await controller.PutTimesheetEntry(entryId, updatedEntry);
+
+            // Assert
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Equal("Approved or Submitted timesheets cannot be modified.", badRequestResult.Value);
+        }
+
+        [Fact]
+        public async Task PostTimesheetEntry_WhenWeekIsApproved_ReturnsBadRequest()
+        {
+            // Arrange
+            using var context = CreateContext();
+            var entryDate = new DateTime(2024, 4, 8);
+            context.TimesheetEntries.Add(new TimesheetEntry { Id = 1, Date = entryDate, ProjectName = "Existing Approved", TotalHours = 8, Status = TimesheetStatus.Approved });
+            await context.SaveChangesAsync();
+
+            var controller = CreateController(context);
+            var newEntry = new TimesheetEntry { Date = entryDate, ProjectName = "New Entry to Approved Week", TotalHours = 2, Status = TimesheetStatus.Draft };
+
+            // Act
+            var result = await controller.PostTimesheetEntry(newEntry);
+
+            // Assert
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Equal("Cannot add new entries to an Approved or Submitted week.", badRequestResult.Value);
+        }
+
+        [Fact]
+        public async Task PostTimesheetEntry_WhenWeekIsSubmitted_ReturnsBadRequest()
+        {
+            // Arrange
+            using var context = CreateContext();
+            var entryDate = new DateTime(2024, 4, 15);
+            context.TimesheetEntries.Add(new TimesheetEntry { Id = 1, Date = entryDate, ProjectName = "Existing Submitted", TotalHours = 8, Status = TimesheetStatus.Submitted });
+            await context.SaveChangesAsync();
+
+            var controller = CreateController(context);
+            var newEntry = new TimesheetEntry { Date = entryDate, ProjectName = "New Entry to Submitted Week", TotalHours = 2, Status = TimesheetStatus.Draft };
+
+            // Act
+            var result = await controller.PostTimesheetEntry(newEntry);
+
+            // Assert
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+            Assert.Equal("Cannot add new entries to an Approved or Submitted week.", badRequestResult.Value);
         }
     }
 }

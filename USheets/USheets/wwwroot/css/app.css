@@ -1,13 +1,332 @@
-/* --- Add these new styles for the modal and update weekend-day --- */
+/* Fluent 2 Design Inspired Styles */
+:root {
+    --fluent-primary: #0078D4; /* Primary Blue */
+    --fluent-primary-dark: #005A9E; /* Darker Blue for hover states */
+    --fluent-secondary: #6c757d; /* Neutral Gray for secondary elements */
+    --fluent-secondary-dark: #545b62; /* Darker Gray for hover */
+    --fluent-background: #ffffff; /* White background */
+    --fluent-surface: #f8f9fa;  /* Slightly off-white for cards, sections */
+    --fluent-text: #212529; /* Dark gray for text */
+    --fluent-border: #dee2e6; /* Light gray for borders */
+    --fluent-error: #dc3545; /* Red for errors */
+    --fluent-success: #28a745; /* Green for success */
+    --fluent-warning: #ffc107; /* Yellow for warnings */
+    --fluent-info: #17a2b8; /* Teal for informational messages */
 
-/* Updated Weekend Style */
+    --border-radius-base: 4px; /* Rounded corners for most elements */
+    --input-focus-shadow: 0 0 0 0.2rem rgba(0, 120, 212, 0.25); /* Focus ring for inputs */
+
+    /* Re-using existing Fluent variables where applicable */
+    --fluent-neutral-gray-190: #323130; /* Text Color */
+    --fluent-neutral-gray-160: #605E5C; /* Secondary Text / Icons */
+    --fluent-neutral-gray-130: #A19F9D; /* Borders / Dividers */
+    --fluent-neutral-gray-40: #F3F2F1;  /* Subtle backgrounds, hover states */
+    --fluent-neutral-gray-20: #FAF9F8;  /* Very light backgrounds */
+    --fluent-white: #FFFFFF;
+}
+
+/* Base Typography & Body */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--fluent-background);
+    color: var(--fluent-neutral-gray-190); /* Using existing variable for main text */
+    margin: 0;
+    padding: 0;
+    font-size: 14px; /* Consistent base font size */
+}
+
+/* Buttons */
+.btn {
+    border-radius: var(--border-radius-base);
+    padding: 0.5rem 1rem; /* Adjusted padding */
+    font-weight: 600; /* Semibold for better readability */
+    transition: background-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, border-color 0.15s ease-in-out;
+    border: 1px solid transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.5; /* Ensure text is vertically centered */
+}
+
+.btn:disabled, .btn.disabled { /* Added .disabled class for consistency */
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background-color: var(--fluent-primary);
+    border-color: var(--fluent-primary);
+    color: var(--fluent-white);
+}
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--fluent-primary-dark);
+    border-color: var(--fluent-primary-dark);
+}
+
+.btn-secondary {
+    background-color: var(--fluent-secondary);
+    border-color: var(--fluent-secondary);
+    color: var(--fluent-white);
+}
+.btn-secondary:hover:not(:disabled) {
+    background-color: var(--fluent-secondary-dark);
+    border-color: var(--fluent-secondary-dark);
+}
+
+/* Adding other button types based on defined variables */
+.btn-success {
+    background-color: var(--fluent-success);
+    border-color: var(--fluent-success);
+    color: var(--fluent-white);
+}
+.btn-success:hover:not(:disabled) {
+    background-color: #1e7e34; /* Darken(#28a745, 10%) */
+    border-color: #1c7430;
+}
+
+.btn-danger {
+    background-color: var(--fluent-error);
+    border-color: var(--fluent-error);
+    color: var(--fluent-white);
+}
+.btn-danger:hover:not(:disabled) {
+    background-color: #b02a37; /* Darken(#dc3545, 10%) */
+    border-color: #a52834;
+}
+
+.btn-info { /* For 'Current Week' button, etc. */
+    background-color: var(--fluent-info);
+    border-color: var(--fluent-info);
+    color: var(--fluent-white);
+}
+.btn-info:hover:not(:disabled) {
+    background-color: #117a8b; /* Darken(#17a2b8, 10%) */
+    border-color: #10707f;
+}
+.btn-info.active-current-week-btn { /* Style for active current week button */
+    background-color: var(--fluent-primary-dark); /* Make it look more active */
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+}
+
+
+.btn-icon-nav, .btn-icon-only {
+    width: 38px; /* Maintain size from existing CSS */
+    height: 38px;
+    padding: 0; /* Remove padding for icon-only */
+    font-size: 1.2rem; /* Adjust as needed */
+}
+.btn-icon-only {
+    font-size: 1.5rem; /* Larger for single action icons like '+' */
+}
+
+.btn-sm { /* For delete 'X' button */
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Tables */
+.timesheet-table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 800px; /* From existing */
+    border: 1px solid var(--fluent-border);
+}
+.timesheet-table th, .timesheet-table td {
+    padding: 0.75rem;
+    text-align: left;
+    vertical-align: middle; /* From existing */
+    border-bottom: 1px solid var(--fluent-border);
+}
+.timesheet-table thead th {
+    background-color: var(--fluent-surface);
+    font-weight: 600; /* Semibold for headers */
+    white-space: nowrap; /* From existing */
+    text-align: center; /* From existing */
+}
+.timesheet-table thead th:first-child {
+    text-align: left; /* From existing */
+}
+.timesheet-table tbody tr:last-child td {
+    border-bottom: none; /* From existing */
+}
+
+/* Inputs/Selects */
+.form-control {
+    border-radius: var(--border-radius-base);
+    border: 1px solid var(--fluent-border);
+    padding: 0.5rem 0.75rem; /* Adjusted padding */
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    width: 100%;
+    font-size: 1rem; /* From existing */
+    box-sizing: border-box; /* From existing */
+}
+.form-control:focus {
+    border-color: var(--fluent-primary);
+    box-shadow: var(--input-focus-shadow); /* Using defined variable */
+    outline: 0; /* From existing */
+}
+.hours-input { /* From existing */
+    max-width: 75px;
+    text-align: right;
+    margin: 0 auto;
+}
+.non-standard-hours-warning { /* From existing */
+    border-color: var(--fluent-warning); /* Use Fluent warning color */
+    box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.3); /* Adjusted shadow */
+}
+
+/* Layout & Containers */
+.main-container {
+    max-width: 1200px; /* From existing */
+    margin: 0 auto; /* From existing */
+    padding: 1.5rem; /* Increased padding */
+}
+.page-header {
+    margin-bottom: 1.5rem;
+    text-align: center; /* From existing */
+}
+h1.week-display { /* From existing */
+    font-size: 1.75em;
+    font-weight: 600;
+    color: var(--fluent-neutral-gray-190);
+    margin: 0;
+}
+.button-container-toolbar {
+    margin-bottom: 1.5rem; /* Increased margin */
+    display: flex;
+    flex-wrap: wrap; /* From existing */
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem; /* From existing */
+}
+.button-group-left, .button-group-right { /* From existing */
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.table-responsive-container {
+    overflow-x: auto;
+    background-color: var(--fluent-white); /* Changed from fluent-surface to white for less layering */
+    padding: 1rem; /* Keep padding */
+    border-radius: var(--border-radius-base);
+    border: 1px solid var(--fluent-border); /* Add border instead of shadow for cleaner look */
+    margin-bottom: 1.5rem; /* Increased margin */
+}
+.summary-section {
+    background-color: var(--fluent-surface);
+    padding: 1.5rem; /* Increased padding */
+    border-radius: var(--border-radius-base);
+    border: 1px solid var(--fluent-border); /* Add border */
+    margin-top: 1.5rem; /* From existing */
+}
+.summary-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem; /* From existing */
+}
+
+/* Status Badges (using existing logic, just ensuring color variables) */
+.status-badge {
+    padding: 0.35rem 0.75rem; /* Slightly adjusted padding */
+    border-radius: var(--border-radius-base); /* Consistent border radius */
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--fluent-white);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.status-badge.status-draft { background-color: var(--fluent-secondary); }
+.status-badge.status-submitted { background-color: var(--fluent-info); } /* Changed to info for less emphasis than primary */
+.status-badge.status-approved { background-color: var(--fluent-success); }
+.status-badge.status-rejected { background-color: var(--fluent-error); }
+
+.total-hours-summary { font-size: 1.1rem; font-weight: 600; } /* Added font-weight */
+
+/* Autosave status messages */
+.autosave-status { font-size: 0.9rem; }
+.autosave-status.status-saved { color: var(--fluent-success); }
+.autosave-status.status-saving { color: var(--fluent-neutral-gray-160); }
+.autosave-status.status-error { color: var(--fluent-error); }
+
+
+/* Navigation Tabs */
+.nav-tabs {
+    border-bottom: 2px solid var(--fluent-border);
+    margin-bottom: 1.5rem; /* Added margin from Home.razor's mb-3 */
+}
+.nav-tabs .nav-item {
+    margin-bottom: -2px; /* Align bottom border of active tab with nav-tabs border */
+}
+.nav-tabs .nav-link {
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.75rem 1.25rem;
+    margin-right: 0.5rem;
+    color: var(--fluent-neutral-gray-160); /* Use existing gray */
+    font-weight: 500; /* Medium weight for inactive tabs */
+    transition: color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+.nav-tabs .nav-link:hover {
+    color: var(--fluent-primary);
+    border-bottom-color: var(--fluent-primary-dark); /* Darker on hover */
+}
+.nav-tabs .nav-link.active {
+    color: var(--fluent-primary);
+    border-bottom-color: var(--fluent-primary);
+    font-weight: 600; /* Semibold for active tab */
+}
+
+/* Alert Messages */
+.alert-danger {
+    background-color: #FDE7E9; /* Lighter red background */
+    border: 1px solid var(--fluent-error);
+    color: #A52834; /* Darker red text for better contrast */
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--border-radius-base);
+    margin-bottom: 1rem;
+}
+
+/* Submit Container */
+.submit-container { text-align: right; }
+.btn-submit {
+    padding: 0.6rem 1.5rem; /* Adjusted padding */
+    font-size: 1.1rem;
+}
+
+/* Loading Indicator */
+.loading-indicator p {
+    font-size: 1.1rem;
+    color: var(--fluent-neutral-gray-160);
+    text-align: center;
+    padding: 2rem;
+}
+
+/* Special Day Cell Styles from existing CSS - ensure they use new vars or are compatible */
 .timesheet-table td.weekend-day {
-    background-color: var(--fluent-neutral-gray-40); /* Was FAF9F8, now F3F2F1 */
+    background-color: var(--fluent-neutral-gray-20); /* Lighter than original for subtlety */
     font-style: italic;
     color: var(--fluent-neutral-gray-160);
 }
+.timesheet-table td.public-holiday {
+    background-color: #FFF4CE; /* Existing - could be mapped to a fluent warning-light */
+    font-style: italic;
+}
+.timesheet-table td.current-day {
+    background-color: #E1F0FA; /* Lighter blue */
+    font-weight: bold;
+}
+.timesheet-table .total-hours-cell { /* From existing */
+    font-weight: bold;
+    text-align: center;
+}
 
-/* Confirmation Modal Styles */
+
+/* Modal Styles - Adopted from existing, ensuring Fluent variables */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -20,381 +339,77 @@
     align-items: center;
     z-index: 1050;
 }
-
 .modal-content {
     background: var(--fluent-white);
     padding: 1.5rem;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    border-radius: var(--border-radius-base); /* Fluent radius */
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2); /* Softer shadow */
     width: 90%;
     max-width: 500px;
     z-index: 1051;
 }
-
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--fluent-neutral-gray-40);
+    border-bottom: 1px solid var(--fluent-border); /* Use Fluent border */
     padding-bottom: 1rem;
     margin-bottom: 1rem;
 }
-
 .modal-title {
     margin: 0;
     font-size: 1.25rem;
     font-weight: 600;
+    color: var(--fluent-neutral-gray-190);
     display: flex;
     align-items: center;
     gap: 0.75rem;
 }
+.modal-title .icon-success { font-size: 1.5rem; color: var(--fluent-success); }
+.modal-title .icon-warning { font-size: 1.5rem; color: var(--fluent-warning); }
 
-    .modal-title .icon-success {
-        font-size: 1.5rem;
-    }
-
-    .modal-title .icon-warning {
-        font-size: 1.5rem;
-    }
-
-.btn-close {
+.btn-close { /* Standardized close button */
     border: none;
     background: none;
     font-size: 1.5rem;
-    font-weight: bold;
-    cursor: pointer;
+    font-weight: normal; /* Lighter than bold */
     color: var(--fluent-neutral-gray-160);
+    opacity: 0.7;
+    transition: opacity 0.15s ease-in-out;
 }
+.btn-close:hover { opacity: 1; }
 
-.modal-body {
-    margin-bottom: 1.5rem;
+.modal-body { margin-bottom: 1.5rem; }
+.modal-body ul {
+    padding-left: 20px;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    background-color: var(--fluent-surface); /* Use surface for list background */
+    border: 1px solid var(--fluent-border);
+    border-radius: var(--border-radius-base);
+    padding: 1rem 1rem 1rem 2rem;
 }
-
-    .modal-body ul {
-        padding-left: 20px;
-        margin-top: 0;
-        margin-bottom: 1rem;
-        background-color: var(--fluent-neutral-gray-20);
-        border: 1px solid var(--fluent-neutral-gray-40);
-        border-radius: var(--fluent-border-radius);
-        padding: 1rem 1rem 1rem 2rem;
-    }
-
-    .modal-body li {
-        margin-bottom: 0.5rem;
-    }
-
-    .modal-body .confirmation-question {
-        font-weight: bold;
-        text-align: center;
-        font-size: 1.1rem;
-        margin-top: 1.5rem;
-    }
-
-
+.modal-body li { margin-bottom: 0.5rem; }
+.modal-body .confirmation-question {
+    font-weight: 600; /* Semibold instead of bold */
+    text-align: center;
+    font-size: 1.1rem;
+    margin-top: 1.5rem;
+    color: var(--fluent-neutral-gray-190);
+}
 .modal-footer {
     display: flex;
     justify-content: flex-end;
     gap: 0.75rem;
 }
 
-
-/* --- Include all previous CSS from the last step as well --- */
-/* (All other styles for buttons, layout, table, etc. remain the same) */
-:root {
-    --fluent-primary-blue: #0078D4;
-    --fluent-primary-blue-dark: #005A9E;
-    --fluent-neutral-gray-190: #323130;
-    --fluent-neutral-gray-160: #605E5C;
-    --fluent-neutral-gray-130: #A19F9D;
-    --fluent-neutral-gray-40: #F3F2F1;
-    --fluent-neutral-gray-20: #FAF9F8;
-    --fluent-white: #FFFFFF;
-    --fluent-error-red: #D83B01;
-    --fluent-success-green: #107C10;
-    --fluent-warning-orange: #FF8C00;
-    --fluent-border-radius: 4px;
-    --input-focus-shadow: 0 0 0 2px rgba(0, 120, 212, 0.3);
-}
-
-html, body {
-    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
-    color: var(--fluent-neutral-gray-190);
-    background-color: var(--fluent-white);
-    margin: 0;
-    padding: 0;
-    font-size: 14px;
-}
-
-.main-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 1rem 1.5rem;
-}
-
-.page-header {
-    margin-bottom: 1.5rem;
-    text-align: center;
-}
-
-h1.week-display {
-    font-size: 1.75em;
-    font-weight: 600;
-    color: var(--fluent-neutral-gray-190);
-    margin: 0;
-}
-
-.button-container-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.button-group-left, .button-group-right {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.btn {
-    border-radius: var(--fluent-border-radius);
-    padding: 8px 16px;
-    font-weight: 600;
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: all 0.15s ease-in-out;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-    .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-.btn-primary {
-    background-color: var(--fluent-primary-blue);
-    color: var(--fluent-white);
-}
-
-    .btn-primary:hover:not(:disabled) {
-        background-color: var(--fluent-primary-blue-dark);
-    }
-
-.btn-secondary {
-    background-color: var(--fluent-white);
-    color: var(--fluent-primary-blue);
-    border: 1px solid var(--fluent-primary-blue);
-}
-
-    .btn-secondary:hover:not(:disabled) {
-        background-color: var(--fluent-neutral-gray-20);
-    }
-
-.btn-success {
-    background-color: var(--fluent-success-green);
-    color: var(--fluent-white);
-}
-
-.btn-danger {
-    background-color: var(--fluent-error-red);
-    color: var(--fluent-white);
-}
-
-.btn-info {
-    background-color: var(--fluent-neutral-gray-160);
-    color: var(--fluent-white);
-}
-
-    .btn-info.active-current-week-btn {
-        background-color: var(--fluent-primary-blue);
-        font-weight: bold;
-        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
-    }
-
-.btn-icon-nav {
-    font-size: 1.2rem;
-    line-height: 1;
-    width: 38px;
-    height: 38px;
-    padding: 0;
-}
-
-.btn-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-}
-
-.btn-icon-only {
-    width: 38px;
-    height: 38px;
-    font-size: 1.5rem;
-    padding: 0;
-    line-height: 1;
-}
-
-.table-responsive-container {
-    overflow-x: auto;
-    border: 1px solid var(--fluent-neutral-gray-130);
-    border-radius: var(--fluent-border-radius);
-}
-
-.timesheet-table {
-    width: 100%;
-    min-width: 800px;
-    border-collapse: collapse;
-}
-
-    .timesheet-table th, .timesheet-table td {
-        border-bottom: 1px solid var(--fluent-neutral-gray-130);
-        padding: 0.75rem;
-        text-align: left;
-        vertical-align: middle;
-    }
-
-    .timesheet-table th {
-        background-color: var(--fluent-neutral-gray-40);
-        font-weight: 600;
-        white-space: nowrap;
-        text-align: center;
-    }
-
-        .timesheet-table th:first-child {
-            text-align: left;
-        }
-
-    .timesheet-table tbody tr:last-child td {
-        border-bottom: none;
-    }
-
-    .timesheet-table td.public-holiday {
-        background-color: #FFF4CE;
-    }
-
-    .timesheet-table td.current-day {
-        background-color: #CCE4F7;
-        font-weight: bold;
-    }
-
-    .timesheet-table .total-hours-cell {
-        font-weight: bold;
-        text-align: center;
-    }
-
-.form-control {
-    width: 100%;
-    padding: 8px 12px;
-    font-size: 1rem;
-    border: 1px solid var(--fluent-neutral-gray-130);
-    border-radius: var(--fluent-border-radius);
-    transition: all 0.15s ease-in-out;
-    box-sizing: border-box;
-}
-
-    .form-control:focus {
-        border-color: var(--fluent-primary-blue);
-        outline: 0;
-        box-shadow: var(--input-focus-shadow);
-    }
-
-.hours-input {
-    max-width: 75px;
-    text-align: right;
-    margin: 0 auto;
-}
-
-.non-standard-hours-warning {
-    border-color: var(--fluent-warning-orange);
-    box-shadow: 0 0 0 2px rgba(255, 140, 0, 0.3);
-}
-
-.summary-section {
-    margin-top: 1.5rem;
-    padding: 1rem;
-    background-color: var(--fluent-neutral-gray-20);
-    border-radius: var(--fluent-border-radius);
-}
-
-.summary-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1rem;
-}
-
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 1rem;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: var(--fluent-white);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-    .status-badge.status-draft {
-        background-color: var(--fluent-neutral-gray-160);
-    }
-
-    .status-badge.status-submitted {
-        background-color: var(--fluent-primary-blue);
-    }
-
-    .status-badge.status-approved {
-        background-color: var(--fluent-success-green);
-    }
-
-    .status-badge.status-rejected {
-        background-color: var(--fluent-error-red);
-    }
-
-.total-hours-summary {
-    font-size: 1.1rem;
-}
-
-.alert-danger {
-    background-color: #FED9CC;
-    border: 1px solid var(--fluent-error-red);
-    color: var(--fluent-error-red);
-    padding: 0.75rem 1.25rem;
-    border-radius: var(--fluent-border-radius);
-    margin-bottom: 1rem;
-}
-
-.submit-container {
-    text-align: right;
-}
-
-.btn-submit {
-    padding: 10px 24px;
-    font-size: 1.1rem;
-}
-
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    .main-container {
-        padding: 1rem;
-    }
-
-    h1.week-display {
-        font-size: 1.5em;
-    }
-
-    .button-container-toolbar {
-        justify-content: flex-start;
-    }
-
-    .submit-container {
-        text-align: center;
-    }
-
-    .btn-submit {
-        width: 100%;
-    }
+    .main-container { padding: 1rem; }
+    h1.week-display { font-size: 1.5em; }
+    .button-container-toolbar { justify-content: space-between; } /* Keep space-between for small screens if possible */
+    .button-group-left, .button-group-right { flex-basis: auto; /* Allow wrapping */ }
+    .submit-container { text-align: center; }
+    .btn-submit { width: 100%; }
+    .nav-tabs .nav-link { padding: 0.5rem 0.75rem; } /* Smaller padding for tabs on mobile */
 }
