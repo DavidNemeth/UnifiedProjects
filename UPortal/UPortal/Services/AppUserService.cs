@@ -417,5 +417,37 @@ namespace UPortal.Services
             _logger.LogInformation("UserHasRoleAsync check for UserId: {UserId}, RoleName: {RoleName} resulted in {HasRole}.", userId, roleName, hasRole);
             return hasRole;
         }
+
+        /// <inheritdoc />
+        public async Task<List<AppUserDto>> GetByIdsAsync(IEnumerable<int> userIds)
+        {
+            _logger.LogInformation("GetByIdsAsync called for {UserCount} user IDs.", userIds.Count());
+            if (userIds == null || !userIds.Any())
+            {
+                return new List<AppUserDto>();
+            }
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var users = await context.AppUsers
+                .Where(u => userIds.Contains(u.Id)) // Filter by the provided list of IDs
+                .Include(u => u.Location)
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .ToListAsync();
+
+            var userDtos = users.Select(u => new AppUserDto
+            {
+                Id = u.Id,
+                Name = u.Name,
+                IsActive = u.IsActive,
+                AzureAdObjectId = u.AzureAdObjectId,
+                LocationId = u.LocationId,
+                LocationName = u.Location?.Name ?? string.Empty,
+                RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
+            }).ToList();
+
+            _logger.LogInformation("GetByIdsAsync found {UserCount} matching users.", userDtos.Count);
+            return userDtos;
+        }
     }
 }

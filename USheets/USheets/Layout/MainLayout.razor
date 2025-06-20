@@ -1,10 +1,47 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
 @inherits LayoutComponentBase
 
-<div class="page">
-    <main>
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+<CascadingAuthenticationState>
+    <div class="page">
+        <AuthorizeView>
+            <Authorized>
+                <header class="app-header">
+                    <nav class="top-nav-bar">
+                        <ul class="nav nav-tabs">
+                            <li class="nav-item">
+                                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                                    <span class="nav-icon"></span>
+                                    <span>My Timesheet</span>
+                                </NavLink>
+                            </li>
+
+                            <AuthorizeView Roles="Manager" Context="authContext">
+                                <Authorized>
+                                    <li class="nav-item">
+                                        <NavLink class="nav-link" href="manager-dashboard">
+                                            <span class="nav-icon"></span>
+                                            <span>Manager Dashboard</span>
+                                        </NavLink>
+                                    </li>
+                                </Authorized>
+                            </AuthorizeView>
+                        </ul>
+                    </nav>
+                </header>
+            </Authorized>
+            <NotAuthorized>
+                <main>
+                    <article class="content px-4">
+                        @Body
+                    </article>
+                </main>
+            </NotAuthorized>
+        </AuthorizeView>
+
+        <main>
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+</CascadingAuthenticationState>

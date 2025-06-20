@@ -11,8 +11,9 @@ builder.Services.AddTransient<BrowserRequestCredentialsMessageHandler>();
 
 builder.Services.AddHttpClient<ITimesheetService, RestApiTimesheetService>(client =>
 {
-    client.BaseAddress = new Uri("https://localhost:7198");
-});
+    client.BaseAddress = new Uri("https://dev.uportal.local:7198");
+})
+.AddHttpMessageHandler<BrowserRequestCredentialsMessageHandler>();
 
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 

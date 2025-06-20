@@ -1,19 +1,34 @@
-using USheets.Models;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using USheets.Dtos;
 
 namespace USheets.Services
 {
     public interface ITimesheetService
     {
-        Task<List<TimesheetEntry>?> GetTimesheetEntriesAsync(DateTime weekStartDate);
-        Task SaveTimesheetEntriesAsync(DateTime weekStartDate, List<TimesheetEntry> entries);
-        Task<List<TimesheetEntry>?> CopyTimesheetEntriesFromPreviousWeekAsync(DateTime currentWeekStartDate, DateTime previousWeekStartDate);
+        /// <summary>
+        /// Gets the entire weekly timesheet for a given start date.
+        /// Returns null if no timesheet exists for that week.
+        /// </summary>
+        Task<TimesheetDto?> GetTimesheetAsync(DateTime weekStartDate);
 
-        // Methods for Manager Dashboard
-        Task<List<TimesheetEntry>?> GetPendingApprovalTimesheetsAsync();
-        Task<TimesheetEntry?> ApproveTimesheetAsync(int timesheetId); // Return updated entry
-        Task<TimesheetEntry?> RejectTimesheetAsync(int timesheetId, string reason); // Return updated entry
+        /// <summary>
+        /// Saves a weekly timesheet. This handles both creating a new timesheet
+        /// and updating an existing one.
+        /// </summary>
+        Task<TimesheetDto> SaveTimesheetAsync(TimesheetCreateUpdateDto dto);
+
+        /// <summary>
+        /// [Manager] Gets all timesheets pending approval.
+        /// </summary>
+        Task<List<TimesheetDto>> GetPendingApprovalTimesheetsAsync();
+
+        /// <summary>
+        /// [Manager] Approves a timesheet.
+        /// </summary>
+        Task<TimesheetDto> ApproveTimesheetAsync(int timesheetId);
+
+        /// <summary>
+        /// [Manager] Rejects a timesheet with a reason.
+        /// </summary>
+        Task<TimesheetDto> RejectTimesheetAsync(int timesheetId, string reason);
     }
 }

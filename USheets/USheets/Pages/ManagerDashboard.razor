@@ -1,89 +1,251 @@
-@page "/manager-dashboard"
-@using USheets.Models
-@using Microsoft.AspNetCore.Authorization
-
+﻿@page "/manager-dashboard"
+@using USheets.Dtos
+@using USheets.Services
+@inject ITimesheetService TimesheetService
+@inject IUserService UserService
 @attribute [Authorize(Roles = "Manager")]
 
-<div class="page-header">
-    <h3>Manager Dashboard</h3>
-    <p>Pending Timesheet Approvals</p>
+<div class="main-container">
+    <div class="page-header">
+        <h3>Manager Dashboard</h3>
+        <p>Review and act on timesheets pending approval.</p>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-indicator"><p><em>Loading pending approvals...</em></p></div>
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">@_errorMessage</div>
+    }
+    else if (_pendingTimesheets == null || !_pendingTimesheets.Any())
+    {
+        <div class="empty-state-container">
+            <h4>All Clear!</h4>
+            <p>There are no timesheets currently pending your approval.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive-container">
+            <table class="timesheet-table">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;"></th>
+                        <th>Employee</th>
+                        <th>Week Of</th>
+                        <th>Total Hours</th>
+                        <th>Comments</th>
+                        <th style="width: 15%; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var timesheet in _pendingTimesheets)
+                    {
+                        <tr class="summary-row">
+                            <td>
+                                <button class="btn btn-link btn-sm" @onclick="() => ToggleDetails(timesheet)" aria-label="Toggle details">
+                                    <i class="fas @(timesheet.IsExpanded ? "fa-chevron-down" : "fa-chevron-right")"></i>
+                                </button>
+                            </td>
+                            <td>@timesheet.EmployeeName</td>
+                            <td>@timesheet.WeekStartDate.ToString("d MMMM, yyyy")</td>
+                            <td>@timesheet.TotalHours.ToString("0.##")</td>
+                            <td>@timesheet.Comments</td>
+                            <td style="text-align: right;">
+                                <button class="btn btn-success btn-sm" @onclick="() => ApproveTimesheetAsync(timesheet.Id)">Approve</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => ShowRejectModal(timesheet.Id)">Reject</button>
+                            </td>
+                        </tr>
+
+                        @if (timesheet.IsExpanded)
+                        {
+                            <tr>
+                                <td></td>
+                                <td colspan="5">
+                                    <div class="details-container">
+                                        <h6 class="details-header">Timesheet Breakdown</h6>
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Pay Code</th>
+                                                    <th>Project</th>
+                                                    <th class="text-end">Hours</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var line in timesheet.Lines)
+                                                {
+                                                    <tr>
+                                                        <td>@line.PayCode</td>
+                                                        <td>@(line.ProjectName ?? "N/A")</td>
+                                                        <td class="text-end">@line.TotalHours.ToString("0.##")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 </div>
 
-@if (isLoading)
+@if (_showRejectionModal)
 {
-    <p class="loading-message"><em>Loading timesheets...</em></p>
-}
-else if (!string.IsNullOrEmpty(errorMessage))
-{
-    <div class="alert alert-danger" role="alert">@errorMessage</div>
-}
-else if (pendingTimesheets == null || !pendingTimesheets.Any())
-{
-    <p class="no-data-message"><em>No timesheets are currently pending approval.</em></p>
-}
-else
-{
-    <div class="table-responsive-container">
-        <table class="timesheet-table">
-            <thead>
-                <tr>
-                    <th>Employee</th>
-                <th>Week Start Date</th>
-                <th>Total Hours</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var timesheet in pendingTimesheets)
-            {
-                <tr>
-                    <td>@timesheet.UserId</td> @* Placeholder - needs IUserService integration *@
-                    <td>@timesheet.Date.ToShortDateString()</td>
-                    <td>@timesheet.TotalHours</td>
-                    <td>@timesheet.Status</td>
-                    <td>
-                        @if (timesheet.Status == TimesheetStatus.Submitted)
-                        {
-                            <button class="btn btn-success btn-sm" @onclick="() => ApproveTimesheetClicked(timesheet.Id)">Approve</button>
-                            <button class="btn btn-danger btn-sm" @onclick="() => RejectTimesheetClicked(timesheet.Id)">Reject</button>
-                        }
-                    </td>
-                </tr>
-                @if (timesheet.Status == TimesheetStatus.Rejected && !string.IsNullOrWhiteSpace(timesheet.RejectionReason))
+    <div class="modal-overlay" @onclick="CloseRejectModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5 class="modal-title">Reject Timesheet</h5>
+                <button type="button" class="btn-close" aria-label="Close" @onclick="CloseRejectModal"></button>
+            </div>
+            <div class="modal-body">
+                <label for="rejectionReason" class="form-label">Please provide a reason for rejection:</label>
+                <textarea id="rejectionReason" class="form-control" @bind="_rejectionInput" @bind:event="oninput" rows="3" placeholder="e.g., Please correct hours for Wednesday..."></textarea>
+                @if (!string.IsNullOrWhiteSpace(_rejectionModalErrorMessage))
                 {
-                    <tr class="table-warning">
-                        <td colspan="5"><em>Rejection Reason: @timesheet.RejectionReason</em></td>
-                    </tr>
+                    <div class="text-danger mt-2">@_rejectionModalErrorMessage</div>
                 }
-            }
-        </tbody>
-    </table>
-}
-
-@if (showRejectionModal)
-{
-    <div class="modal" tabindex="-1" style="display: block;" role="dialog">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Reject Timesheet</h5>
-                    <button type="button" class="btn-close" aria-label="Close" @onclick="() => CloseRejectionModal()"></button>
-                </div>
-                <div class="modal-body">
-                    <label for="rejectionReason" class="form-label">Reason for rejection:</label>
-                    <textarea id="rejectionReason" class="form-control" @bind="rejectionInput" @bind:event="oninput" rows="3" placeholder="Enter reason..."></textarea>
-                    @if (!string.IsNullOrWhiteSpace(rejectionModalErrorMessage))
-                    {
-                        <div class="text-danger mt-2">@rejectionModalErrorMessage</div>
-                    }
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="() => CloseRejectionModal()">Cancel</button> <!-- Assuming btn-secondary is now gray -->
-                    <button type="button" class="btn btn-danger" @onclick="() => ConfirmRejectTimesheet()">Confirm Reject</button> <!-- Assuming btn-danger is red -->
-                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseRejectModal">Cancel</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmRejectTimesheetAsync">Confirm Rejection</button>
             </div>
         </div>
     </div>
-    <div class="modal-backdrop fade show"></div>
+}
+
+
+@code {
+    #region State and Parameters
+    private List<TimesheetDto>? _pendingTimesheets;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    // Rejection Modal State
+    private bool _showRejectionModal = false;
+    private int _timesheetIdToReject;
+    private string _rejectionInput = "";
+    private string? _rejectionModalErrorMessage;
+    #endregion
+
+    #region Lifecycle Methods
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPendingTimesheetsAsync();
+    }
+    #endregion
+
+    #region Data Loading
+    private async Task LoadPendingTimesheetsAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var timesheets = await TimesheetService.GetPendingApprovalTimesheetsAsync();
+            if (timesheets.Any())
+            {
+                await EnhanceWithEmployeeNamesAsync(timesheets);
+            }
+            _pendingTimesheets = timesheets;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"An error occurred while loading data: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task EnhanceWithEmployeeNamesAsync(List<TimesheetDto> timesheets)
+    {
+        if (UserService == null) return;
+
+        var userIds = timesheets.Select(t => t.UserId).Distinct().ToList();
+        try
+        {
+            var userMap = await UserService.GetUsersByIdsAsync(userIds);
+            foreach (var ts in timesheets)
+            {
+                ts.EmployeeName = userMap.TryGetValue(ts.UserId, out var user) ? user.Name : $"Unknown (ID: {ts.UserId})";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "Could not load employee names. Please try again later.";
+        }
+    }
+    #endregion
+
+    #region Action Handlers
+    private async Task ApproveTimesheetAsync(int timesheetId)
+    {
+        _errorMessage = null;
+        try
+        {
+            await TimesheetService.ApproveTimesheetAsync(timesheetId);
+            _pendingTimesheets?.RemoveAll(t => t.Id == timesheetId); // Update UI instantly
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to approve timesheet: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmRejectTimesheetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_rejectionInput))
+        {
+            _rejectionModalErrorMessage = "Rejection reason cannot be empty.";
+            return;
+        }
+
+        _errorMessage = null;
+        _rejectionModalErrorMessage = null;
+
+        try
+        {
+            await TimesheetService.RejectTimesheetAsync(_timesheetIdToReject, _rejectionInput);
+            _pendingTimesheets?.RemoveAll(t => t.Id == _timesheetIdToReject);
+            CloseRejectModal();
+        }
+        catch (Exception ex)
+        {
+            // Show the error on the main page, not the modal
+            _errorMessage = $"Failed to reject timesheet: {ex.Message}";
+            CloseRejectModal();
+        }
+    }
+    #endregion
+
+    #region UI Helpers
+    private void ToggleDetails(TimesheetDto timesheet)
+    {
+        timesheet.IsExpanded = !timesheet.IsExpanded;
+    }
+
+    private void ShowRejectModal(int timesheetId)
+    {
+        _timesheetIdToReject = timesheetId;
+        _rejectionInput = "";
+        _rejectionModalErrorMessage = null;
+        _showRejectionModal = true;
+    }
+
+    private void CloseRejectModal()
+    {
+        _showRejectionModal = false;
+        _rejectionInput = "";
+        _rejectionModalErrorMessage = null;
+    }
+    #endregion
 }

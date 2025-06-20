@@ -1,158 +1,125 @@
 ﻿@page "/"
 @using USheets.Dtos
-@using USheets.Models
 @using USheets.Services
 @using System.Threading
 @inject ITimesheetService TimesheetService
-@inject IUserService UserService
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
-
-<ul class="nav nav-tabs mb-3">
-    <li class="nav-item">
-        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-            My Timesheet
-        </NavLink>
-    </li>
-    
-    <AuthorizeView Roles="Manager">
-        <Authorized>
-            <li class="nav-item">
-                <NavLink class="nav-link" href="manager-dashboard">
-                    Manager Dashboard
-                </NavLink>
-            </li>
-        </Authorized>
-    </AuthorizeView>
-</ul>
-
-    <AuthorizeView>
-        <Authorized>
-            @{
-                var user = context.User;
-                var roleNames = user.FindAll(ClaimTypes.Role).Select(c => c.Value);
-            }
-            <p>Welcome, @user.Identity.Name!</p>
-            <p>Your ID: @user.FindFirst(ClaimTypes.NameIdentifier)?.Value</p>
-            <p>Roles: @string.Join(", ", roleNames)</p>
-            <p>Azure AD Object ID: @user.FindFirst("AzureAdObjectId")?.Value</p>
-        </Authorized>
-        <NotAuthorized>
-            <p>Loading user information or user is not authenticated.</p>
-        </NotAuthorized>
-    </AuthorizeView>
+@attribute [Authorize]
 
 <div class="main-container">
-    @if (!string.IsNullOrEmpty(_errorMessage))
-    {
-        <p style="color: red;">Error: @_errorMessage</p>
-    }
-
-         <div class="page-header">
-        <h1 class="week-display">@DisplayWeekRange()</h1>
+    <div class="page-header">
+        <h3>@DisplayWeekRange()</h3>
     </div>
 
     <div class="button-container-toolbar">
         <div class="button-group-left">
-            <button class="btn btn-primary btn-icon-nav" @onclick="() => ChangeWeek(-1)" aria-label="Previous Week">←</button>
-            <button class="btn btn-primary btn-icon-nav" @onclick="() => ChangeWeek(1)" aria-label="Next Week">→</button>
-            <button class="btn btn-info @(IsDisplayingCurrentCalendarWeek ? "active-current-week-btn" : "")" @onclick="GoToCurrentWeek">Current Week</button>
-            <button class="btn btn-secondary" @onclick="CopyFromPreviousWeek" disabled="@IsTimesheetReadOnly">Copy from Previous Week</button>
+            <button class="btn btn-primary btn-icon-nav" @onclick="() => ChangeWeekAsync(-1)" aria-label="Previous Week" disabled="@_isSaving">‹</button>
+            <button class="btn btn-primary btn-icon-nav" @onclick="() => ChangeWeekAsync(1)" aria-label="Next Week" disabled="@_isSaving">›</button>
+            <button class="btn btn-info @(_isDisplayingCurrentCalendarWeek ? "active-current-week-btn" : "")" @onclick="GoToCurrentWeekAsync" disabled="@_isSaving">Current Week</button>
+            <button class="btn btn-secondary" @onclick="CopyFromPreviousWeekAsync" disabled="@IsTimesheetReadOnly">Copy from Previous Week</button>
         </div>
         <div class="button-group-right">
-            <button class="btn btn-secondary btn-icon-only" @onclick="AddNewLine" disabled="@(!CanAddNewLine || IsTimesheetReadOnly)" aria-label="Add New Line">+</button>
+            <span class="autosave-status @(_autosaveStatusClass)">@_autosaveStatusMessage</span>
         </div>
     </div>
-
-    @if (weekEntries == null)
+    
+    @if (_isLoading)
     {
-        <div class="loading-indicator">
-            <p><em>Loading...</em></p>
-        </div>
+        <div class="loading-indicator"><p><em>Loading Timesheet...</em></p></div>
     }
-    else
+    else if (!string.IsNullOrEmpty(_errorMessage))
     {
-        <div class="table-responsive-container">
-            <table class="table timesheet-table">
-                <thead>
-                    <tr>
-                        <th>Pay Code</th>
-                        @foreach (var day in daysOfWeek)
-                        {
-                            <th>@day.ToString().Substring(0, 3)</th>
-                        }
-                        <th>Comments</th>
-                        <th>Total</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var entry in weekEntries)
-                    {
+        <div class="alert alert-danger" role="alert">@_errorMessage</div>
+    }
+    else if (_timesheet != null)
+    {
+        <div class="timesheet-container @(IsTimesheetReadOnly ? "readonly-timesheet" : "")">
+            @if (_timesheet.Status == TimesheetStatus.Rejected && !string.IsNullOrWhiteSpace(_timesheet.RejectionReason))
+            {
+                <div class="rejection-notice">
+                    <strong>Rejected:</strong> @_timesheet.RejectionReason
+                </div>
+            }
+
+            <div class="table-responsive-container">
+                <table class="timesheet-table">
+                    <thead>
                         <tr>
-                            <td>
-                                <select class="form-control" value="@entry.PayCode" @onchange="async (ChangeEventArgs e) => await HandlePayCodeChange(entry, e.Value?.ToString())" disabled="@IsTimesheetReadOnly">
-                                    @foreach (var payCode in allPayCodes)
-                                    {
-                                        bool isUsedByAnotherEntry = weekEntries.Any(e => e != entry && e.PayCode == payCode);
-                                        <option value="@payCode" disabled="@isUsedByAnotherEntry">@payCode</option>
-                                    }
-                                </select>
-                            </td>
-                            @foreach (var dayKey in daysOfWeek)
+                            <th>Pay Code</th>
+                            @foreach (var day in _daysOfWeek)
                             {
-                                <td class="@GetDayCellClasses(dayKey)">
-                                    <input type="number"
-                                           class="@GetHourInputClasses(entry, dayKey)"
-                                           value="@entry.Hours[dayKey]"
-                                           @oninput="async (ChangeEventArgs e) => await HandleHoursChange(entry, dayKey, e.Value?.ToString())"
-                                           disabled="@IsTimesheetReadOnly" />
-                                </td>
+                                <th class="day-header">@day.ToString().Substring(0, 3) <br/> <span class="date-header">@GetDateForDay(day).Day</span></th>
                             }
-                            <td>
-                                <input type="text"
-                                       class="form-control"
-                                       @bind="entry.Comments" @bind:event="oninput"
-                                       disabled="@IsTimesheetReadOnly" />
-                            </td>
-                            <td class="total-hours-cell">@entry.TotalHours</td>
-                            <td><button class="btn btn-danger btn-sm" @onclick="() => DeleteLine(entry)" aria-label="Delete line" disabled="@IsTimesheetReadOnly">X</button></td>
+                            <th>Project / Task</th>
+                            <th class="total-header">Total</th>
+                            <th class="action-header"><button class="btn btn-primary btn-icon-only" @onclick="AddNewLine" disabled="@(!CanAddNewLine || IsTimesheetReadOnly)" aria-label="Add New Line">+</button></th>
                         </tr>
-                    }
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in _timesheet.Lines)
+                        {
+                            <tr>
+                                <td>
+                                    <select class="form-control" @bind="line.PayCode" @bind:after="TriggerAutoSave" disabled="@IsTimesheetReadOnly">
+                                        @foreach (var payCode in _allPayCodes)
+                                        {
+                                            bool isUsed = _timesheet.Lines.Any(l => l != line && l.PayCode == payCode);
+                                            <option value="@payCode" disabled="@isUsed">@payCode</option>
+                                        }
+                                    </select>
+                                </td>
+                                @foreach (var dayKey in _daysOfWeek)
+                                {
+                                    <td class="@GetDayCellClasses(dayKey)">
+                                        <input type="number" step="0.25" min="0" max="24"
+                                               class="form-control hours-input"
+                                               value="@line.Hours[dayKey]"
+                                               @oninput="(e) => HandleHoursChange(line, dayKey, e.Value?.ToString())"
+                                               disabled="@IsTimesheetReadOnly"/>
+                                    </td>
+                                }
+                                <td><input type="text" class="form-control" placeholder="Optional" @bind="line.ProjectName" @bind:after="TriggerAutoSave" disabled="@IsTimesheetReadOnly" /></td>
+                                <td class="total-hours-cell">@line.TotalHours.ToString("0.##")</td>
+                                <td><button class="btn btn-danger btn-sm" @onclick="() => DeleteLine(line)" aria-label="Delete line" disabled="@IsTimesheetReadOnly">X</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="summary-section">
             <div class="summary-bar">
-                <span class="@GetStatusBadgeClass()">
-                    @(weekEntries.FirstOrDefault()?.Status.ToString() ?? "Draft")
-                </span>
-                <span class="total-hours-summary"><strong>Total:</strong> @totalWeeklyHours</span>
-                <span class="autosave-status @(_autosaveStatusClass)">@_autosaveStatusMessage</span>
-            </div>
-
-            @if (!string.IsNullOrEmpty(errorMessage))
-            {
-                <div class="alert alert-danger" role="alert">
-                    @errorMessage
+                <span class="@GetStatusBadgeClass()">@_timesheet.Status.ToString()</span>
+                <span class="total-hours-summary"><strong>Total:</strong> @_timesheet.TotalHours.ToString("0.##")</span>
+                <div>
+                     <label for="overallComments" class="form-label visually-hidden">Overall Comments</label>
+                     <input id="overallComments" type="text" class="form-control" placeholder="Add overall comments..." @bind="_timesheet.Comments" @bind:after="TriggerAutoSave" disabled="@IsTimesheetReadOnly"/>
                 </div>
-            }
-
+            </div>
             <div class="submit-container">
                 <button class="btn btn-success btn-submit" @onclick="HandleSubmitRequest" disabled="@IsSubmitButtonDisabled()">@GetSubmitButtonText()</button>
             </div>
         </div>
     }
+    else
+    {
+        <div class="empty-state-container">
+            <h4>No timesheet started for this week.</h4>
+            <button class="btn btn-primary" @onclick="AddNewLine">
+                <i class="fas fa-plus" style="margin-right: 8px;"></i> Start by Adding a Line
+            </button>
+        </div>
+    }
 </div>
 
-@if (showConfirmationModal)
+@if (_showConfirmationModal)
 {
     <div class="modal-overlay" @onclick="CancelSubmission">
         <div class="modal-content" @onclick:stopPropagation="true">
             <div class="modal-header">
                 <h3 class="modal-title">
-                    @if (isStandardSubmission)
+                    @if (_isStandardSubmission)
                     {
                         <span class="icon-success">✅</span> <span>Confirm Submission</span>
                     }
@@ -164,12 +131,12 @@
                 <button class="btn-close" @onclick="CancelSubmission">×</button>
             </div>
             <div class="modal-body">
-                @if (confirmationMessages.Any())
+                @if (_confirmationMessages.Any())
                 {
                     <ul>
-                        @foreach (var message in confirmationMessages)
+                        @foreach (var message in _confirmationMessages)
                         {
-                            <li>@message</li>
+                            <li>@((MarkupString)message)</li>
                         }
                     </ul>
                 }
@@ -185,116 +152,124 @@
 
 
 @code {
-    private List<TimesheetEntry>? weekEntries;
-    private double totalWeeklyHours = 0;
-    private string? errorMessage;
-    private DateTime currentWeekStart;
-    private DateTime currentWeekEnd;
-
-    private UserDto? _currentUser;
-    // Add a field to store the current user's internal ID
-    private int _currentUserId;
-    private string _errorMessage = string.Empty;
-
-    private DayOfWeek[] daysOfWeek = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
-    private readonly List<DateTime> publicHolidays = new List<DateTime>();
-    private List<string> allPayCodes = new List<string> { PayCodes.Regular, PayCodes.Sick, PayCodes.Overtime };
-    private bool CanAddNewLine { get; set; } = true;
-    private bool IsDisplayingCurrentCalendarWeek { get; set; } = false;
-
-    private bool IsTimesheetReadOnly => weekEntries?.Any(e => e.Status == TimesheetStatus.Approved || e.Status == TimesheetStatus.Submitted) ?? false;
-
-    // --- NEW: State for debounced autosave ---
-    private Timer? _debounceTimer;
+    #region State and Parameters
+    private TimesheetDto? _timesheet;
+    private bool _isLoading = true;
     private bool _isSaving = false;
+    private string? _errorMessage;
+    private DateTime _currentWeekStart;
+
+    private readonly DayOfWeek[] _daysOfWeek = { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
+    private readonly List<string> _allPayCodes = new() { PayCodes.Regular, PayCodes.Sick, PayCodes.Overtime };
+
+    private Timer? _debounceTimer;
     private string _autosaveStatusMessage = "All changes saved.";
     private string _autosaveStatusClass = "status-saved";
-    private readonly int _debouncePeriod = 800; // 800ms delay
+    private readonly int _debouncePeriod = 1000;
 
     // --- State for the confirmation modal ---
-    private bool showConfirmationModal = false;
-    private List<string> confirmationMessages = new List<string>();
-    private bool isStandardSubmission = true;
+    private bool _showConfirmationModal = false;
+    private List<string> _confirmationMessages = new();
+    private bool _isStandardSubmission = true;
+    #endregion
 
+    #region Computed Properties
+    private bool IsTimesheetReadOnly => _timesheet?.Status == TimesheetStatus.Approved || _timesheet?.Status == TimesheetStatus.Submitted;
+    private bool CanAddNewLine => _allPayCodes.Count > (_timesheet?.Lines.Count ?? 0);
+    private bool _isDisplayingCurrentCalendarWeek => _currentWeekStart.Date == GetStartOfWeek(DateTime.Today).Date;
+    #endregion
+
+    #region Page Lifecycle
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-
-        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out var userId))
-        {
-            _currentUserId = userId;
-        }
-        else
-        {
-            _errorMessage = "Could not identify the current user. Please log in again.";
-            return;
-        }
-        InitializePublicHolidays();
-        InitializeDebounceTimer(); // Set up the timer
-        currentWeekStart = GetStartOfWeek(DateTime.Today);
-        currentWeekEnd = currentWeekStart.AddDays(6);
-        await LoadWeekEntriesAsync();
-        UpdateIsDisplayingCurrentCalendarWeekState();
+        // No need to fetch the user here; identity is handled by the auth cookie on API calls.
+        InitializeDebounceTimer();
+        _currentWeekStart = GetStartOfWeek(DateTime.Today);
+        await LoadTimesheetForWeekAsync();
     }
 
-    // --- ROBUST AUTOSAVE IMPLEMENTATION ---
+    public void Dispose() => _debounceTimer?.Dispose();
+    #endregion
 
-    private void InitializeDebounceTimer()
+    #region Data Loading and Saving
+    private async Task LoadTimesheetForWeekAsync()
     {
-        _debounceTimer = new Timer(async (_) =>
-        {
-            // The timer callback runs on a background thread, so we must switch to the
-            // UI thread to safely call StateHasChanged and interact with Blazor components.
-            await InvokeAsync(SaveTimesheet);
-        }, null, Timeout.Infinite, Timeout.Infinite); // Don't start the timer yet
-    }
-
-    /// <summary>
-    /// Triggers the debouncer to schedule a save operation.
-    /// </summary>
-    private void TriggerAutoSave()
-    {
-        // Provide immediate feedback that a change is detected and will be saved.
-        _autosaveStatusMessage = "Saving...";
-        _autosaveStatusClass = "status-saving";
-        StateHasChanged();
-
-        // Reset the timer. This cancels any pending save and starts the countdown again.
-        _debounceTimer?.Change(_debouncePeriod, Timeout.Infinite);
-    }
-
-    /// <summary>
-    /// The core save method. This is now the single point of responsibility
-    /// for ensuring the correct UserId is assigned to all entries.
-    /// </summary>
-    private async Task SaveTimesheet()
-    {
-        if (_isSaving) return; // Prevent concurrent save operations
-        if (weekEntries == null) return; // Nothing to save
-
-        _isSaving = true;
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged(); 
 
         try
         {
-            foreach (var entry in weekEntries)
-            {
-                entry.UserId = _currentUserId;
-            }
-
-            await TimesheetService.SaveTimesheetEntriesAsync(currentWeekStart, weekEntries);
-        
-            _autosaveStatusMessage = $"All changes saved at {DateTime.Now:HH:mm:ss}";
+            _timesheet = await TimesheetService.GetTimesheetAsync(_currentWeekStart);
+            _autosaveStatusMessage = "All changes saved.";
             _autosaveStatusClass = "status-saved";
-            errorMessage = null; 
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Save failed: {ex}");
-            _autosaveStatusMessage = "Error: Failed to save changes.";
+            _errorMessage = $"Failed to load timesheet: {ex.Message}";
+            _timesheet = null;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void InitializeDebounceTimer()
+    {
+        _debounceTimer = new Timer(async (_) => await InvokeAsync(AutoSaveTimesheetAsync), null, Timeout.Infinite, Timeout.Infinite);
+    }
+
+    private void TriggerAutoSave()
+    {
+        if (IsTimesheetReadOnly) return;
+        _autosaveStatusMessage = "Saving...";
+        _autosaveStatusClass = "status-saving";
+        StateHasChanged();
+        _debounceTimer?.Change(_debouncePeriod, Timeout.Infinite);
+    }
+    
+    private async Task AutoSaveTimesheetAsync()
+    {
+        if (IsTimesheetReadOnly) return;
+        await PerformSaveAsync();
+    }
+    
+    private async Task PerformSaveAsync(TimesheetStatus? newStatus = null)
+    {
+        if (_isSaving || _timesheet == null) return;
+
+        _isSaving = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (newStatus.HasValue)
+            {
+                _timesheet.Status = newStatus.Value;
+            }
+
+            var dto = new TimesheetCreateUpdateDto
+            {
+                WeekStartDate = _timesheet.WeekStartDate,
+                Comments = _timesheet.Comments,
+                Status = _timesheet.Status,
+                Lines = _timesheet.Lines.Select(l => new TimesheetLineDto { PayCode = l.PayCode, ProjectName = l.ProjectName, Hours = l.Hours }).ToList()
+            };
+
+            var savedTimesheet = await TimesheetService.SaveTimesheetAsync(dto);
+            _timesheet = savedTimesheet;
+
+            _autosaveStatusMessage = $"Saved at {DateTime.Now:HH:mm:ss}";
+            _autosaveStatusClass = "status-saved";
+            _errorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Save failed: {ex.Message}";
+            _autosaveStatusMessage = "Error saving!";
             _autosaveStatusClass = "status-error";
-            errorMessage = $"Autosave failed. Details: {ex.Message}";
         }
         finally
         {
@@ -302,153 +277,45 @@
             await InvokeAsync(StateHasChanged);
         }
     }
+    #endregion
     
-    // --- UPDATED EVENT HANDLERS TO USE DEBOUNCER ---
-
-    private async Task HandleHoursChange(TimesheetEntry entry, DayOfWeek day, string? value)
-    {
-        errorMessage = null;
-        if (double.TryParse(value, out double hours) && hours >= 0)
-        {
-            double otherEntriesTotal = weekEntries.Where(e => e != entry).Sum(e => e.Hours.TryGetValue(day, out double h) ? h : 0);
-            if (otherEntriesTotal + hours > 24)
-            {
-                errorMessage = $"Total hours for {day} cannot exceed 24.";
-            }
-            else
-            {
-                entry.Hours[day] = hours;
-            }
-        }
-        else
-        {
-            entry.Hours[day] = 0; // Default to 0 on invalid input
-            if (!string.IsNullOrEmpty(value)) errorMessage = "Invalid number format for hours.";
-        }
-
-        CalculateEntryTotalHours(entry);
-        CalculateTotalWeeklyHours();
-        TriggerAutoSave(); // Instead of calling SaveTimesheet directly
-    }
-    
-    private void HandleCommentChange(TimesheetEntry entry, string? newComment)
-    {
-        entry.Comments = newComment ?? string.Empty;
-        TriggerAutoSave();
-    }
-    
-    private async Task HandlePayCodeChange(TimesheetEntry entry, string? newPayCode)
-    {
-        // This is a significant change, so we can save it immediately or still debounce.
-        // Debouncing is safer and more consistent with other inputs.
-        if (!string.IsNullOrEmpty(newPayCode) && !weekEntries.Any(e => e != entry && e.PayCode == newPayCode))
-        {
-            entry.PayCode = newPayCode;
-            errorMessage = null;
-            UpdateCanAddNewLineState();
-            TriggerAutoSave();
-        }
-        else
-        {
-             errorMessage = $"{newPayCode} is already in use.";
-        }
-    }
-    
-    private void AddNewLine()
-    {
-        if (!CanAddNewLine) return;
-        if (weekEntries == null) weekEntries = new List<TimesheetEntry>();
-
-        string? firstAvailablePayCode = allPayCodes.FirstOrDefault(pc => !weekEntries.Select(e => e.PayCode).Contains(pc));
-        if (!string.IsNullOrEmpty(firstAvailablePayCode))
-        {
-            errorMessage = null;
-            var newEntry = new TimesheetEntry
-            {
-                Date = currentWeekStart,
-                PayCode = firstAvailablePayCode,
-                AutosaveAction = TriggerAutoSave
-            };
-            weekEntries.Add(newEntry);
-            UpdateCanAddNewLineState();
-            TriggerAutoSave(); 
-        }
-    }
-    
-    private void DeleteLine(TimesheetEntry entry)
-    {
-        if (weekEntries != null)
-        {
-            weekEntries.Remove(entry);
-            CalculateTotalWeeklyHours();
-            UpdateCanAddNewLineState();
-            TriggerAutoSave(); // Save after deleting a line
-        }
-    }
-
-    public void Dispose()
-    {
-        // Important: Dispose of the timer to prevent memory leaks.
-        _debounceTimer?.Dispose();
-    }
-
-    // --- All other existing methods from the original file remain below ---
-    
-    #region [Existing Methods: No changes needed below this line]
-
-    private async Task LoadWeekEntriesAsync()
-    {
-        errorMessage = null;
-        weekEntries = await TimesheetService.GetTimesheetEntriesAsync(currentWeekStart) ?? new List<TimesheetEntry>();
-        foreach (var entry in weekEntries)
-        {
-            entry.AutosaveAction = TriggerAutoSave;
-        }
-        CalculateAllEntryTotals();
-        CalculateTotalWeeklyHours();
-        UpdateCanAddNewLineState();
-        StateHasChanged();
-    }
-    
+    #region Submission Flow and Validation
     private (bool isStandard, List<string> messages) AnalyzeSubmission()
     {
         var messages = new List<string>();
         bool isStandard = true;
 
-        var sickHours = weekEntries.FirstOrDefault(e => e.PayCode == PayCodes.Sick)?.TotalHours ?? 0;
+        if (_timesheet == null) return (false, messages);
+
+        var sickHours = _timesheet.Lines.FirstOrDefault(l => l.PayCode == PayCodes.Sick)?.TotalHours ?? 0;
         if (sickHours > 0)
         {
             isStandard = false;
-            messages.Add($"Timesheet includes {sickHours} sick hour(s).");
+            messages.Add($"Timesheet includes <strong>{sickHours}</strong> sick hour(s).");
         }
 
-        var overtimeHours = weekEntries.FirstOrDefault(e => e.PayCode == PayCodes.Overtime)?.TotalHours ?? 0;
+        var overtimeHours = _timesheet.Lines.FirstOrDefault(l => l.PayCode == PayCodes.Overtime)?.TotalHours ?? 0;
         if (overtimeHours > 0)
         {
             isStandard = false;
-            messages.Add($"Timesheet includes {overtimeHours} overtime hour(s).");
+            messages.Add($"Timesheet includes <strong>{overtimeHours}</strong> overtime hour(s).");
         }
-        
-        var regularEntry = weekEntries.FirstOrDefault(e => e.PayCode == PayCodes.Regular);
-        if (regularEntry != null)
+
+        var regularLine = _timesheet.Lines.FirstOrDefault(l => l.PayCode == PayCodes.Regular);
+        if (regularLine != null)
         {
             var workdays = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday };
             foreach (var day in workdays)
             {
-                if (regularEntry.Hours.TryGetValue(day, out var hours) && hours != 8 && hours != 0)
+                if (regularLine.Hours.TryGetValue(day, out var hours) && hours != 8 && hours != 0)
                 {
                     isStandard = false;
-                    messages.Add($"Regular hours for {day} are {hours} (not the standard 8).");
+                    messages.Add($"Regular hours for {day} are <strong>{hours}</strong> (not the standard 8).");
                 }
-            }
-            if ((regularEntry.Hours.TryGetValue(DayOfWeek.Saturday, out var satHours) && satHours > 0) || (regularEntry.Hours.TryGetValue(DayOfWeek.Sunday, out var sunHours) && sunHours > 0))
-            {
-                isStandard = false;
-                messages.Add("Regular hours are logged on a weekend.");
             }
         }
         
-        if (isStandard && messages.Count == 0)
+        if (isStandard && !messages.Any())
         {
             messages.Add("Timesheet appears to be standard.");
         }
@@ -456,222 +323,171 @@
         return (isStandard, messages);
     }
     
-    private async Task HandleSubmitRequest()
-    {
-        await SaveTimesheet(); // Ensure latest changes are saved before submission validation.
-        
-        if (!IsSubmissionValid(out var validationError))
-        {
-            errorMessage = validationError;
-            return;
-        }
-        errorMessage = null;
-
-        var analysis = AnalyzeSubmission();
-        isStandardSubmission = analysis.isStandard;
-        confirmationMessages = analysis.messages;
-        
-        showConfirmationModal = true;
-    }
-
     private bool IsSubmissionValid(out string? error)
     {
-        if (weekEntries == null || !weekEntries.Any())
+        if (_timesheet == null || !_timesheet.Lines.Any())
         {
             error = "Cannot submit an empty timesheet.";
             return false;
         }
-        if (weekEntries.FirstOrDefault()?.Status == TimesheetStatus.Approved)
+        if (_timesheet.TotalHours <= 0)
         {
-            error = "Cannot submit an approved timesheet.";
+            error = "Cannot submit a timesheet with zero total hours.";
             return false;
         }
-
-        foreach (var dayKey in daysOfWeek)
-        {
-            double dailyTotal = weekEntries.Sum(e => e.Hours.TryGetValue(dayKey, out var h) ? h : 0);
-            if (dailyTotal > 24)
-            {
-                error = $"Total hours for {dayKey} cannot exceed 24.";
-                return false;
-            }
-        }
-
-        if (totalWeeklyHours <= 0 && weekEntries.FirstOrDefault()?.Status == TimesheetStatus.Draft)
-        {
-            error = "Cannot submit a new timesheet with zero hours.";
-            return false;
-        }
-
         error = null;
         return true;
     }
 
-    private void CancelSubmission() => showConfirmationModal = false;
+    private async Task HandleSubmitRequest()
+    {
+        await PerformSaveAsync();
+        
+        if (!IsSubmissionValid(out var validationError))
+        {
+            _errorMessage = validationError;
+            return;
+        }
+        _errorMessage = null;
+
+        var analysis = AnalyzeSubmission();
+        _isStandardSubmission = analysis.isStandard;
+        _confirmationMessages = analysis.messages;
+        
+        _showConfirmationModal = true;
+    }
+
+    private void CancelSubmission() => _showConfirmationModal = false;
 
     private async Task ConfirmSubmission()
     {
-        showConfirmationModal = false;
+        _showConfirmationModal = false;
+        await PerformSaveAsync(TimesheetStatus.Submitted);
+    }
+    #endregion
 
-        if (weekEntries != null)
+    #region UI Event Handlers
+    private async Task ChangeWeekAsync(int weeksToAdd)
+    {
+        _currentWeekStart = _currentWeekStart.AddDays(7 * weeksToAdd);
+        await LoadTimesheetForWeekAsync();
+    }
+
+    private async Task GoToCurrentWeekAsync()
+    {
+        _currentWeekStart = GetStartOfWeek(DateTime.Today);
+        await LoadTimesheetForWeekAsync();
+    }
+    
+    private void AddNewLine()
+    {
+        if (!CanAddNewLine) return;
+
+        if (_timesheet == null)
         {
-            foreach (var entry in weekEntries)
+            _timesheet = new TimesheetDto
             {
-                entry.Status = TimesheetStatus.Submitted;
+                WeekStartDate = _currentWeekStart,
+                Status = TimesheetStatus.Draft
+            };
+        }
+
+        string? firstAvailablePayCode = _allPayCodes.FirstOrDefault(pc => !_timesheet.Lines.Any(l => l.PayCode == pc));
+        if (firstAvailablePayCode != null)
+        {
+            _timesheet.Lines.Add(new TimesheetLineDto
+            {
+                PayCode = firstAvailablePayCode,
+                Hours = _daysOfWeek.ToDictionary(day => day, day => 0.0)
+            });
+            TriggerAutoSave();
+        }
+    }
+
+    private void DeleteLine(TimesheetLineDto line)
+    {
+        _timesheet?.Lines.Remove(line);
+        TriggerAutoSave();
+    }
+
+    private void HandleHoursChange(TimesheetLineDto line, DayOfWeek day, string? value)
+    {
+        if (double.TryParse(value, out double hours) && hours >= 0 && hours <= 24)
+        {
+            line.Hours[day] = hours;
+            line.TotalHours = line.Hours.Values.Sum();
+            TriggerAutoSave();
+        }
+    }
+    
+    private async Task CopyFromPreviousWeekAsync()
+    {
+        try
+        {
+            var previousWeekStart = _currentWeekStart.AddDays(-7);
+            var previousTimesheet = await TimesheetService.GetTimesheetAsync(previousWeekStart);
+
+            if (previousTimesheet != null && previousTimesheet.Lines.Any())
+            {
+                _timesheet = new TimesheetDto
+                {
+                    WeekStartDate = _currentWeekStart,
+                    Status = TimesheetStatus.Draft,
+                    Comments = previousTimesheet.Comments,
+                    Lines = previousTimesheet.Lines.Select(l => new TimesheetLineDto
+                    {
+                        PayCode = l.PayCode,
+                        ProjectName = l.ProjectName,
+                        Hours = new Dictionary<DayOfWeek, double>(l.Hours),
+                        TotalHours = l.TotalHours
+                    }).ToList()
+                };
+                await PerformSaveAsync();
             }
-            // Use the robust SaveTimesheet method for the final submission save.
-            await SaveTimesheet();
-        }
-        StateHasChanged();
-    }
-
-    private string GetStatusBadgeClass()
-    {
-        var status = weekEntries?.FirstOrDefault()?.Status ?? TimesheetStatus.Draft;
-        return "status-badge " + status switch {
-            TimesheetStatus.Submitted => "status-submitted",
-            TimesheetStatus.Approved => "status-approved",
-            TimesheetStatus.Rejected => "status-rejected",
-            _ => "status-draft"
-        };
-    }
-    
-    private void UpdateIsDisplayingCurrentCalendarWeekState()
-    {
-        DateTime startOfActualCurrentWeek = GetStartOfWeek(DateTime.Today);
-        IsDisplayingCurrentCalendarWeek = (currentWeekStart.Date == startOfActualCurrentWeek.Date);
-    }
-    private void InitializePublicHolidays()
-    {
-        publicHolidays.Clear();
-        int year = currentWeekStart.Year;
-        publicHolidays.Add(new DateTime(year, 1, 1));
-        publicHolidays.Add(new DateTime(year, 12, 25));
-    }
-    private async Task ChangeWeek(int weeksToAdd)
-    {
-        var oldYear = currentWeekStart.Year;
-        currentWeekStart = currentWeekStart.AddDays(7 * weeksToAdd);
-        currentWeekEnd = currentWeekStart.AddDays(6);
-        if (currentWeekStart.Year != oldYear) { InitializePublicHolidays(); }
-        await LoadWeekEntriesAsync();
-        UpdateIsDisplayingCurrentCalendarWeekState();
-    }
-    private async Task CopyFromPreviousWeek()
-    {
-        DateTime previousWeekStart = currentWeekStart.AddDays(-7);
-        weekEntries = await TimesheetService.CopyTimesheetEntriesFromPreviousWeekAsync(currentWeekStart, previousWeekStart);
-        if (weekEntries == null) weekEntries = new List<TimesheetEntry>();
-        else
-        {
-            foreach (var entry in weekEntries)
+            else
             {
-                entry.AutosaveAction = TriggerAutoSave;
-            }
-        }
-        
-        CalculateAllEntryTotals();
-        CalculateTotalWeeklyHours();
-        UpdateCanAddNewLineState();
-        StateHasChanged();
-        TriggerAutoSave(); // Save the newly copied entries
-    }
-    
-    private void UpdateCanAddNewLineState()
-    {
-        if (weekEntries == null)
-        {
-            CanAddNewLine = true;
-            return;
-        }
-        var usedPayCodesCount = weekEntries.Select(e => e.PayCode).Distinct().Count();
-        CanAddNewLine = usedPayCodesCount < allPayCodes.Count;
-    }
-    
-    private string GetDayCellClasses(DayOfWeek dayOfWeekInRowLoop)
-    {
-        int dayOffset = ((int)dayOfWeekInRowLoop - (int)DayOfWeek.Monday + 7) % 7;
-        DateTime cellDate = currentWeekStart.AddDays(dayOffset);
-        var classes = new System.Text.StringBuilder();
-
-        if (cellDate.DayOfWeek == DayOfWeek.Saturday || cellDate.DayOfWeek == DayOfWeek.Sunday)
-            classes.Append(" weekend-day");
-        if (publicHolidays.Any(ph => ph.Date == cellDate.Date))
-            classes.Append(" public-holiday");
-        if (cellDate.Date == DateTime.Today.Date)
-            classes.Append(" current-day");
-            
-        return classes.ToString().TrimStart();
-    }
-
-    private string GetHourInputClasses(TimesheetEntry entry, DayOfWeek dayKey)
-    {
-        var classes = new System.Text.StringBuilder("form-control hours-input");
-        int dayOffset = ((int)dayKey - (int)DayOfWeek.Monday + 7) % 7;
-        DateTime cellDate = currentWeekStart.AddDays(dayOffset);
-        bool isWeekday = cellDate.DayOfWeek >= DayOfWeek.Monday && cellDate.DayOfWeek <= DayOfWeek.Friday;
-
-        if (entry.PayCode == PayCodes.Regular && isWeekday)
-        {
-            double hours = entry.Hours.TryGetValue(dayKey, out double h) ? h : 0;
-            if (hours != 0 && hours != 8)
-            {
-                classes.Append(" non-standard-hours-warning");
+                _errorMessage = "No data found in the previous week to copy.";
             }
         }
-        return classes.ToString();
-    }
-
-    private void CalculateAllEntryTotals()
-    {
-        if (weekEntries == null) return;
-        foreach (var entry in weekEntries)
+        catch (Exception ex)
         {
-            CalculateEntryTotalHours(entry);
+            _errorMessage = $"Could not copy previous week: {ex.Message}";
         }
     }
+    #endregion
+
+    #region UI State and Display Logic
+    private string DisplayWeekRange() => $"Week of {_currentWeekStart:MMMM d, yyyy}";
     
-    private void CalculateEntryTotalHours(TimesheetEntry entry) => entry.TotalHours = entry.Hours.Values.Sum();
-    
-    private void CalculateTotalWeeklyHours() => totalWeeklyHours = weekEntries?.Sum(e => e.TotalHours) ?? 0;
-    
-    private DateTime GetStartOfWeek(DateTime dt)
+    private DateTime GetDateForDay(DayOfWeek day) => _currentWeekStart.AddDays(((int)day - (int)DayOfWeek.Monday + 7) % 7);
+
+    private string GetDayCellClasses(DayOfWeek day)
     {
-        int diff = (7 + (dt.DayOfWeek - DayOfWeek.Monday)) % 7;
-        return dt.AddDays(-1 * diff).Date;
+        var date = GetDateForDay(day);
+        if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday) return "weekend-day";
+        if (date.Date == DateTime.Today) return "current-day";
+        return "";
     }
-    
+
+    private string GetStatusBadgeClass() => "status-badge status-" + (_timesheet?.Status.ToString().ToLower() ?? "draft");
+
     private string GetSubmitButtonText()
     {
-        var status = weekEntries?.FirstOrDefault()?.Status ?? TimesheetStatus.Draft;
-        return status switch
+        return _timesheet?.Status switch
         {
-            TimesheetStatus.Draft => "Submit Timesheet",
-            TimesheetStatus.Submitted => "Resubmit Timesheet",
-            TimesheetStatus.Approved => "Timesheet Approved",
-            TimesheetStatus.Rejected => "Resubmit Rejected Timesheet",
-            _ => "Submit Timesheet"
+            TimesheetStatus.Submitted => "Resubmit",
+            TimesheetStatus.Approved => "Approved",
+            TimesheetStatus.Rejected => "Resubmit",
+            _ => "Submit for Approval"
         };
     }
 
     private bool IsSubmitButtonDisabled()
     {
-        if (!string.IsNullOrEmpty(errorMessage) || _isSaving) return true;
-        var currentStatus = weekEntries?.FirstOrDefault()?.Status;
-        // Disable if Approved.
-        // Disable if Submitted (it's already submitted, can't submit again unless it becomes editable, e.g. Rejected).
-        // Allow submission for Draft or Rejected statuses.
-        return currentStatus == TimesheetStatus.Approved || currentStatus == TimesheetStatus.Submitted;
+        if (_isSaving || _isLoading || _timesheet == null || !_timesheet.Lines.Any()) return true;
+        return _timesheet.Status == TimesheetStatus.Approved || _timesheet.Status == TimesheetStatus.Submitted;
     }
 
-    private string DisplayWeekRange() => $"Week: {currentWeekStart:dd/MM/yyyy} - {currentWeekEnd:dd/MM/yyyy}";
-
-    private async Task GoToCurrentWeek()
-    {
-        currentWeekStart = GetStartOfWeek(DateTime.Today);
-        currentWeekEnd = currentWeekStart.AddDays(6);
-        await LoadWeekEntriesAsync();
-        UpdateIsDisplayingCurrentCalendarWeekState();
-    }
+    private DateTime GetStartOfWeek(DateTime dt) => dt.AddDays(-1 * ((dt.DayOfWeek - DayOfWeek.Monday + 7) % 7)).Date;
     #endregion
 }

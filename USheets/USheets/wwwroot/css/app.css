@@ -129,7 +129,7 @@ body {
 .timesheet-table {
     border-collapse: collapse;
     width: 100%;
-    min-width: 800px; /* From existing */
+    min-width: 900px; /* From existing */
     border: 1px solid var(--fluent-border);
 }
 .timesheet-table th, .timesheet-table td {
@@ -413,3 +413,42 @@ h1.week-display { /* From existing */
     .btn-submit { width: 100%; }
     .nav-tabs .nav-link { padding: 0.5rem 0.75rem; } /* Smaller padding for tabs on mobile */
 }
+
+
+/* Read-only Timesheet Container */
+.readonly-timesheet {
+    opacity: 0.7;
+    pointer-events: none; /* Prevents clicks, selections, etc., on all child elements */
+}
+
+    .readonly-timesheet .btn {
+        pointer-events: none; /* Extra rule to ensure buttons are not clickable */
+    }
+
+/* Rejection Notice Banner */
+.rejection-notice {
+    background-color: #FFF4CE; /* Light yellow */
+    border: 1px solid var(--fluent-warning);
+    border-radius: var(--border-radius-base);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    color: #664d03; /* Darker text for contrast */
+}
+
+    .rejection-notice strong {
+        color: #000;
+    }
+
+/* Empty State Container */
+.empty-state-container {
+    text-align: center;
+    padding: 3rem 1rem;
+    background-color: var(--fluent-surface);
+    border: 2px dashed var(--fluent-border);
+    border-radius: var(--border-radius-base);
+}
+
+    .empty-state-container h4 {
+        color: var(--fluent-neutral-gray-160);
+        margin-bottom: 1rem;
+    }

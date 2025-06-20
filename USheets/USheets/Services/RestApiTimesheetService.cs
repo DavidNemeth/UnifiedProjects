@@ -1,148 +1,116 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
+using System.Net; 
 using System.Net.Http.Json;
-using System.Threading.Tasks;
-using USheets.Models;
+using USheets.Dtos;
 
 namespace USheets.Services
 {
-    /// <summary>
-    /// A service for interacting with the timesheet REST API.
-    /// This version is modified to throw exceptions on HTTP or serialization failures,
-    //  allowing the caller (UI) to handle errors gracefully.
-    /// </summary>
     public class RestApiTimesheetService : ITimesheetService
     {
         private readonly HttpClient _httpClient;
+        private readonly ILogger<RestApiTimesheetService> _logger;
 
-        public RestApiTimesheetService(HttpClient httpClient)
+        // Inject the logger
+        public RestApiTimesheetService(HttpClient httpClient, ILogger<RestApiTimesheetService> logger)
         {
             _httpClient = httpClient;
+            _logger = logger;
         }
 
-        private async Task<T?> ExecuteRequestAsync<T>(Func<Task<HttpResponseMessage>> requestFunc, string errorContextMessage)
+        public async Task<TimesheetDto?> GetTimesheetAsync(DateTime weekStartDate)
         {
+            var requestUrl = $"/api/timesheets?weekStartDate={weekStartDate:yyyy-MM-dd}";
+            _logger.LogInformation("Requesting timesheet from {Url}", requestUrl);
+
             try
             {
-                var response = await requestFunc();
+                var response = await _httpClient.GetAsync(requestUrl);
 
-                if (response.IsSuccessStatusCode)
+                // If the API returns 204 No Content, it means no timesheet exists for that week.
+                // This is an expected, successful scenario, so we return null.
+                if (response.StatusCode == HttpStatusCode.NoContent)
                 {
-                    if (response.StatusCode == System.Net.HttpStatusCode.NoContent || response.Content == null)
-                    {
-                        return default; // Handles NoContent for GET, or could be void for POST/PUT if not T
-                    }
-                    // Ensure content is not null before attempting to deserialize, primarily for GET requests
-                    // For POST/PUT that might return NoContent but still have IsSuccessStatusCode, this check is also useful.
-                    if (response.Content != null && response.Content.Headers.ContentLength > 0)
-                    {
-                        return await response.Content.ReadFromJsonAsync<T>();
-                    }
-                    return default; // Return default if content is null or empty but success
+                    _logger.LogInformation("No timesheet found for week starting {WeekStart} (204 No Content).", weekStartDate.ToShortDateString());
+                    return null;
                 }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    throw new HttpRequestException($"Error {errorContextMessage}: {response.StatusCode}. Details: {errorContent}");
-                }
+
+                // If we get any other non-success code, throw an exception.
+                response.EnsureSuccessStatusCode();
+
+                // If we get here, it was a 200 OK with a valid JSON body.
+                return await response.Content.ReadFromJsonAsync<TimesheetDto>();
             }
             catch (HttpRequestException ex)
             {
-                Console.WriteLine($"API request error in {errorContextMessage}: {ex.Message}");
-                throw; // Re-throw the original HttpRequestException
-            }
-            catch (Exception ex) // Catches other errors like JSON parsing
-            {
-                Console.WriteLine($"An unexpected error occurred in {errorContextMessage}: {ex.Message}");
-                throw new TimesheetServiceException($"An unexpected error occurred while {errorContextMessage.ToLower()}.", ex);
+                _logger.LogError(ex, "API request failed when getting timesheet. Status: {StatusCode}", ex.StatusCode);
+                throw; // Re-throw so the UI component knows something went wrong.
             }
         }
 
-        private async Task ExecuteRequestAsync(Func<Task<HttpResponseMessage>> requestFunc, string errorContextMessage)
+        public async Task<TimesheetDto> SaveTimesheetAsync(TimesheetCreateUpdateDto dto)
         {
+            _logger.LogInformation("Saving timesheet for week starting {WeekStart}", dto.WeekStartDate.ToShortDateString());
             try
             {
-                var response = await requestFunc();
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    throw new HttpRequestException($"Error {errorContextMessage}: {response.StatusCode}. Details: {errorContent}");
-                }
+                var response = await _httpClient.PutAsJsonAsync("/api/timesheets", dto);
+                response.EnsureSuccessStatusCode();
+                var result = await response.Content.ReadFromJsonAsync<TimesheetDto>();
+                return result ?? throw new InvalidOperationException("API did not return a valid timesheet after save.");
             }
             catch (HttpRequestException ex)
             {
-                Console.WriteLine($"API request error in {errorContextMessage}: {ex.Message}");
+                _logger.LogError(ex, "API request failed when saving timesheet. Status: {StatusCode}", ex.StatusCode);
                 throw;
             }
-            catch (Exception ex)
+        }
+
+        public async Task<List<TimesheetDto>> GetPendingApprovalTimesheetsAsync()
+        {
+            _logger.LogInformation("Fetching pending approval timesheets.");
+            try
             {
-                Console.WriteLine($"An unexpected error occurred in {errorContextMessage}: {ex.Message}");
-                throw new TimesheetServiceException($"An unexpected error occurred while {errorContextMessage.ToLower()}.", ex);
+                var result = await _httpClient.GetFromJsonAsync<List<TimesheetDto>>("/api/timesheets/pending-approval");
+                return result ?? new List<TimesheetDto>();
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "API request failed when fetching pending approvals. Status: {StatusCode}", ex.StatusCode);
+                throw;
             }
         }
 
-        public async Task<List<TimesheetEntry>?> GetTimesheetEntriesAsync(DateTime weekStartDate)
+        public async Task<TimesheetDto> ApproveTimesheetAsync(int timesheetId)
         {
-            var requestUrl = $"/api/Timesheet?weekStartDate={weekStartDate:yyyy-MM-dd}";
-            return await ExecuteRequestAsync<List<TimesheetEntry>?>(
-                () => _httpClient.GetAsync(requestUrl),
-                "fetching timesheet entries"
-            );
+            _logger.LogInformation("Approving timesheet with ID {TimesheetId}", timesheetId);
+            try
+            {
+                var response = await _httpClient.PostAsync($"/api/timesheets/{timesheetId}/approve", null);
+                response.EnsureSuccessStatusCode();
+                var result = await response.Content.ReadFromJsonAsync<TimesheetDto>();
+                return result ?? throw new InvalidOperationException("API did not return a valid timesheet after approval.");
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "API request failed when approving timesheet {TimesheetId}. Status: {StatusCode}", timesheetId, ex.StatusCode);
+                throw;
+            }
         }
 
-        public async Task SaveTimesheetEntriesAsync(DateTime weekStartDate, List<TimesheetEntry> entries)
+        public async Task<TimesheetDto> RejectTimesheetAsync(int timesheetId, string reason)
         {
-            var requestUrl = $"/api/Timesheet/Week?weekStartDate={weekStartDate:yyyy-MM-dd}";
-            await ExecuteRequestAsync(
-                () => _httpClient.PostAsJsonAsync(requestUrl, entries),
-                "saving timesheet entries"
-            );
-        }
-
-        public async Task<List<TimesheetEntry>?> CopyTimesheetEntriesFromPreviousWeekAsync(DateTime currentWeekStartDate, DateTime previousWeekStartDate)
-        {
-            var requestUrl = $"/api/Timesheet/Copy?currentWeekStartDate={currentWeekStartDate:yyyy-MM-dd}&previousWeekStartDate={previousWeekStartDate:yyyy-MM-dd}";
-            return await ExecuteRequestAsync<List<TimesheetEntry>?>(
-                () => _httpClient.PostAsync(requestUrl, null),
-                "copying timesheet entries"
-            );
-        }
-
-        public async Task<List<TimesheetEntry>?> GetPendingApprovalTimesheetsAsync()
-        {
-            var requestUrl = "/api/Timesheet/pending-approval";
-            return await ExecuteRequestAsync<List<TimesheetEntry>?>(
-                () => _httpClient.GetAsync(requestUrl),
-                "fetching pending approval timesheets"
-            );
-        }
-
-        public async Task<TimesheetEntry?> ApproveTimesheetAsync(int timesheetId)
-        {
-            var requestUrl = $"/api/Timesheet/{timesheetId}/approve";
-            return await ExecuteRequestAsync<TimesheetEntry?>(
-                () => _httpClient.PostAsync(requestUrl, null), // No body needed for approval
-                $"approving timesheet with ID {timesheetId}"
-            );
-        }
-
-        public async Task<TimesheetEntry?> RejectTimesheetAsync(int timesheetId, string reason)
-        {
-            var requestUrl = $"/api/Timesheet/{timesheetId}/reject";
-            var payload = new { Reason = reason }; // Matches RejectionReasonModel on API
-            return await ExecuteRequestAsync<TimesheetEntry?>(
-                () => _httpClient.PostAsJsonAsync(requestUrl, payload),
-                $"rejecting timesheet with ID {timesheetId}"
-            );
-        }
-    }
-
-    public class TimesheetServiceException : Exception
-    {
-        public TimesheetServiceException(string message, Exception innerException) : base(message, innerException)
-        {
+            _logger.LogInformation("Rejecting timesheet with ID {TimesheetId}", timesheetId);
+            try
+            {
+                var payload = new RejectionReasonModel { Reason = reason };
+                var response = await _httpClient.PostAsJsonAsync($"/api/timesheets/{timesheetId}/reject", payload);
+                response.EnsureSuccessStatusCode();
+                var result = await response.Content.ReadFromJsonAsync<TimesheetDto>();
+                return result ?? throw new InvalidOperationException("API did not return a valid timesheet after rejection.");
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "API request failed when rejecting timesheet {TimesheetId}. Status: {StatusCode}", timesheetId, ex.StatusCode);
+                throw;
+            }
         }
     }
 }

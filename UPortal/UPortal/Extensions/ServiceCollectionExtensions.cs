@@ -7,6 +7,7 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.OpenApi.Models;
+using System.Security.Claims;
 using UPortal.Data;
 using UPortal.HelperServices;
 using UPortal.Security;
@@ -52,7 +53,7 @@ public static class ServiceCollectionExtensions
         // Configure Data Protection to persist keys
         services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(configuration["DataProtectionSettings:KeyPath"]))
-            .SetApplicationName("UPortal");
+            .SetApplicationName("U-Suite-Apps");
 
         // Add the custom authorization handler for permission-based policies
         services.AddScoped<IAuthorizationHandler, PermissionHandler>();
@@ -78,7 +79,24 @@ public static class ServiceCollectionExtensions
                 if (context.Principal == null) return;
 
                 var userService = context.HttpContext.RequestServices.GetRequiredService<IAppUserService>();
-                await userService.CreateOrUpdateUserFromAzureAdAsync(context.Principal);
+
+                // 1. CAPTURE the result from your service call
+                var appUserDto = await userService.CreateOrUpdateUserFromAzureAdAsync(context.Principal);
+
+                // 2. ADD the new claim to the user's identity
+                if (appUserDto != null && context.Principal.Identity is ClaimsIdentity claimsIdentity)
+                {
+                    // Add our internal, integer database ID as a new claim.
+                    claimsIdentity.AddClaim(new Claim("InternalUserId", appUserDto.Id.ToString()));
+
+                    // (Optional but good practice) Ensure the Name claim is also from our database
+                    var nameClaim = claimsIdentity.FindFirst(ClaimTypes.Name);
+                    if (nameClaim != null)
+                    {
+                        claimsIdentity.RemoveClaim(nameClaim);
+                    }
+                    claimsIdentity.AddClaim(new Claim(ClaimTypes.Name, appUserDto.Name));
+                }
             };
         });
 

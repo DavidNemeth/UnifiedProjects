@@ -8,12 +8,19 @@ namespace UPortal.Services
     /// </summary>
     public interface IAppUserService
     {
+
         /// <summary>
         /// Retrieves a list of all application users with their associated data.
         /// </summary>
         /// <returns>A task that represents the asynchronous operation. The task result contains a list of <see cref="AppUserDto"/>.</returns>
         Task<List<AppUserDto>> GetAllAsync();
 
+        /// <summary>
+        /// Retrieves a list of application users by their unique identifiers.
+        /// </summary>
+        /// <param name="userIds">A collection of user IDs to retrieve.</param>
+        /// <returns>A task that represents the asynchronous operation. The task result contains a list of <see cref="AppUserDto"/>.</returns>
+        Task<List<AppUserDto>> GetByIdsAsync(IEnumerable<int> userIds);
         /// <summary>
         /// Retrieves a specific application user by their unique Azure Active Directory Object ID.
         /// </summary>

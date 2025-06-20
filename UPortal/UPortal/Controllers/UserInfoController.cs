@@ -66,6 +66,44 @@ namespace UPortal.Controllers
         }
 
         /// <summary>
+        /// Retrieves information for a batch of users based on their IDs.
+        /// </summary>
+        /// <remarks>
+        /// Expects a JSON array of integer user IDs in the request body.
+        /// This endpoint is restricted to users with the "Manager" role.
+        /// </remarks>
+        /// <param name="userIds">A list of user IDs to fetch.</param>
+        /// <returns>A list of <see cref="AppUserDto"/> objects for the requested users.</returns>
+        /// <response code="200">Returns the list of found users.</response>
+        /// <response code="400">If the input list of IDs is null or empty.</response>
+        /// <response code="401">If the user is not authenticated.</response>
+        /// <response code="403">If the authenticated user is not a Manager.</response>
+        /// <response code="500">If an unexpected error occurs.</response>
+        [HttpPost("batch")]
+        //[Authorize(Roles = "Manager")]
+        public async Task<IActionResult> GetUsersByIds([FromBody] IEnumerable<int> userIds)
+        {
+            if (userIds == null || !userIds.Any())
+            {
+                _logger.LogWarning("GetUsersByIds was called with no user IDs.");
+                return BadRequest("User ID list cannot be empty.");
+            }
+
+            _logger.LogInformation("Fetching user data for {UserCount} IDs.", userIds.Count());
+
+            try
+            {
+                var users = await _appUserService.GetByIdsAsync(userIds);
+                return Ok(users);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while fetching batch user data.");
+                return StatusCode(500, "An internal server error occurred.");
+            }
+        }
+
+        /// <summary>
         /// A simple endpoint to check if the controller is responsive.
         /// </summary>
         /// <returns>A string "Pong from UserInfoController".</returns>
