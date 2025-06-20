@@ -57,10 +57,10 @@
             <button class="btn btn-primary btn-icon-nav" @onclick="() => ChangeWeek(-1)" aria-label="Previous Week">←</button>
             <button class="btn btn-primary btn-icon-nav" @onclick="() => ChangeWeek(1)" aria-label="Next Week">→</button>
             <button class="btn btn-info @(IsDisplayingCurrentCalendarWeek ? "active-current-week-btn" : "")" @onclick="GoToCurrentWeek">Current Week</button>
-            <button class="btn btn-secondary" @onclick="CopyFromPreviousWeek">Copy from Previous Week</button>
+            <button class="btn btn-secondary" @onclick="CopyFromPreviousWeek" disabled="@IsTimesheetReadOnly">Copy from Previous Week</button>
         </div>
         <div class="button-group-right">
-            <button class="btn btn-secondary btn-icon-only" @onclick="AddNewLine" disabled="@(!CanAddNewLine)" aria-label="Add New Line">+</button>
+            <button class="btn btn-secondary btn-icon-only" @onclick="AddNewLine" disabled="@(!CanAddNewLine || IsTimesheetReadOnly)" aria-label="Add New Line">+</button>
         </div>
     </div>
 
@@ -91,7 +91,7 @@
                     {
                         <tr>
                             <td>
-                                <select class="form-control" value="@entry.PayCode" @onchange="async (ChangeEventArgs e) => await HandlePayCodeChange(entry, e.Value?.ToString())">
+                                <select class="form-control" value="@entry.PayCode" @onchange="async (ChangeEventArgs e) => await HandlePayCodeChange(entry, e.Value?.ToString())" disabled="@IsTimesheetReadOnly">
                                     @foreach (var payCode in allPayCodes)
                                     {
                                         bool isUsedByAnotherEntry = weekEntries.Any(e => e != entry && e.PayCode == payCode);
@@ -105,16 +105,18 @@
                                     <input type="number"
                                            class="@GetHourInputClasses(entry, dayKey)"
                                            value="@entry.Hours[dayKey]"
-                                           @oninput="async (ChangeEventArgs e) => await HandleHoursChange(entry, dayKey, e.Value?.ToString())" />
+                                           @oninput="async (ChangeEventArgs e) => await HandleHoursChange(entry, dayKey, e.Value?.ToString())"
+                                           disabled="@IsTimesheetReadOnly" />
                                 </td>
                             }
                             <td>
                                 <input type="text"
                                        class="form-control"
-                                       @bind="entry.Comments" @bind:event="oninput" />
+                                       @bind="entry.Comments" @bind:event="oninput"
+                                       disabled="@IsTimesheetReadOnly" />
                             </td>
                             <td class="total-hours-cell">@entry.TotalHours</td>
-                            <td><button class="btn btn-danger btn-sm" @onclick="() => DeleteLine(entry)" aria-label="Delete line">X</button></td>
+                            <td><button class="btn btn-danger btn-sm" @onclick="() => DeleteLine(entry)" aria-label="Delete line" disabled="@IsTimesheetReadOnly">X</button></td>
                         </tr>
                     }
                 </tbody>
@@ -199,6 +201,8 @@
     private List<string> allPayCodes = new List<string> { PayCodes.Regular, PayCodes.Sick, PayCodes.Overtime };
     private bool CanAddNewLine { get; set; } = true;
     private bool IsDisplayingCurrentCalendarWeek { get; set; } = false;
+
+    private bool IsTimesheetReadOnly => weekEntries?.Any(e => e.Status == TimesheetStatus.Approved || e.Status == TimesheetStatus.Submitted) ?? false;
 
     // --- NEW: State for debounced autosave ---
     private Timer? _debounceTimer;
@@ -653,8 +657,11 @@
     private bool IsSubmitButtonDisabled()
     {
         if (!string.IsNullOrEmpty(errorMessage) || _isSaving) return true;
-        var status = weekEntries?.FirstOrDefault()?.Status ?? TimesheetStatus.Draft;
-        return status == TimesheetStatus.Approved;
+        var currentStatus = weekEntries?.FirstOrDefault()?.Status;
+        // Disable if Approved.
+        // Disable if Submitted (it's already submitted, can't submit again unless it becomes editable, e.g. Rejected).
+        // Allow submission for Draft or Rejected statuses.
+        return currentStatus == TimesheetStatus.Approved || currentStatus == TimesheetStatus.Submitted;
     }
 
     private string DisplayWeekRange() => $"Week: {currentWeekStart:dd/MM/yyyy} - {currentWeekEnd:dd/MM/yyyy}";

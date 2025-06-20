@@ -184,10 +184,37 @@ namespace USheets.Api.Controllers
                 return BadRequest("ID mismatch");
             }
 
+            // Retrieve the existing entry to check its status
+            var existingEntry = await _context.TimesheetEntries.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id);
+            if (existingEntry == null)
+            {
+                // This case should ideally be caught by TimesheetEntryExists later,
+                // but good to handle explicitly if we're checking status.
+                return NotFound();
+            }
+
+            // Check if the existing entry is Approved or Submitted
+            if (existingEntry.Status == TimesheetStatus.Approved || existingEntry.Status == TimesheetStatus.Submitted)
+            {
+                _logger.LogWarning("Attempt to modify an {Status} timesheet entry with id {Id}.", existingEntry.Status, id);
+                return BadRequest("Approved or Submitted timesheets cannot be modified.");
+            }
+
+            // Prevent changing status of other statuses to Draft or New if it's not already Draft/New - this seems overly restrictive.
+            // The primary goal is to protect Approved/Submitted.
+            // If an entry is, say, Rejected, it should be fine to move it back to Draft.
+            // The original requirement: "ensure that the incoming timesheetEntry.Status cannot be changed to Draft or New if the existing status is Approved or Submitted."
+            // This is already covered by the check above. If existing is Approved/Submitted, we don't proceed.
+
             _context.Entry(timesheetEntry).State = EntityState.Modified;
 
             try
             {
+                // Ensure the status from the payload is respected, unless it's an invalid transition
+                // For now, the main protection is for Approved/Submitted.
+                // If timesheetEntry.Status is different from existingEntry.Status, it will be updated.
+                // We might need more granular status transition rules later, but this meets current req.
+
                 await _context.SaveChangesAsync();
             }
             catch (DbUpdateConcurrencyException)
@@ -223,6 +250,17 @@ namespace USheets.Api.Controllers
 
             try
             {
+                // Check if the week for the new entry is already Approved or Submitted
+                var entriesForDate = await _context.TimesheetEntries
+                                                   .Where(e => e.Date.Date == timesheetEntry.Date.Date)
+                                                   .ToListAsync();
+
+                if (entriesForDate.Any(e => e.Status == TimesheetStatus.Approved || e.Status == TimesheetStatus.Submitted))
+                {
+                    _logger.LogWarning("Attempt to add a new entry to an Approved or Submitted week on {Date}.", timesheetEntry.Date.Date);
+                    return BadRequest("Cannot add new entries to an Approved or Submitted week.");
+                }
+
                 _context.TimesheetEntries.Add(timesheetEntry);
                 await _context.SaveChangesAsync();
 
@@ -244,20 +282,42 @@ namespace USheets.Api.Controllers
                 return BadRequest("weekStartDate is required.");
             }
 
-            if (entries == null || !entries.Any())
-            {
-                // Or handle as deleting all entries for the week if that's desired
-                return BadRequest("Entries list cannot be null or empty.");
-            }
-
+            // ModelState validation should occur before any other logic
             if (!ModelState.IsValid) // Validates each entry in the list
             {
                 return BadRequest(ModelState);
             }
 
+            // First, check if the week already contains Approved or Submitted entries
+            var entriesToCheckStatus = await _context.TimesheetEntries
+                                                .Where(e => e.Date.Date == weekStartDate.Date)
+                                                .AsNoTracking() // No need to track these for this check
+                                                .ToListAsync();
+
+            if (entriesToCheckStatus.Any(e => e.Status == TimesheetStatus.Approved || e.Status == TimesheetStatus.Submitted))
+            {
+                _logger.LogWarning("Attempt to modify an Approved or Submitted week starting {WeekStartDate}.", weekStartDate.Date);
+                return BadRequest("Approved or Submitted timesheets cannot be modified.");
+            }
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                if (entries == null || !entries.Any())
+                {
+                    // Handle as deleting all entries for the week
+                    var existingEntriesToDelete = await _context.TimesheetEntries
+                                                        .Where(e => e.Date.Date == weekStartDate.Date)
+                                                        .ToListAsync();
+                    if (existingEntriesToDelete.Any())
+                    {
+                        _context.TimesheetEntries.RemoveRange(existingEntriesToDelete);
+                        await _context.SaveChangesAsync();
+                    }
+                    await transaction.CommitAsync(); // Commit transaction after successful deletion
+                    return Ok(new List<TimesheetEntry>()); // Return OK with empty list
+                }
+
                 // Remove existing entries for the week
                 var existingEntries = await _context.TimesheetEntries
                                                     .Where(e => e.Date.Date == weekStartDate.Date)
