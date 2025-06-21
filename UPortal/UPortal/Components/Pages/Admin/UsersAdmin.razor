@@ -4,7 +4,10 @@
 @inject IToastService ToastService
 @using Microsoft.FluentUI.AspNetCore.Components
 @using UPortal.Dtos
-@using UPortal.Components.Pages.Admin 
+@using UPortal.Data.Models 
+@using UPortal.Components.Dialogs
+@using UPortal.Components.Pages.Admin
+
 
 @attribute [Authorize(Policy = PermissionPolicies.ManageUsers)]
 
@@ -24,14 +27,18 @@ else
     <FluentDataGrid Pagination="@pagination"
                     RowSize="@DataGridRowSize.Medium"
                     Items="@users.AsQueryable()"
-                    GridTemplateColumns="0.5fr 2fr 2fr 1fr 1fr 1fr 1fr" TGridItem="AppUserDto">
+                    GridTemplateColumns="0.3fr 1.5fr 1fr 0.8fr 0.8fr 0.5fr 1.2fr" TGridItem="AppUserDto">
         <PropertyColumn Property="@(dto => dto.Id)" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.Name)" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.LocationName)" Title="Location" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.GrossMonthlyWage)" Title="Gross Wage" Sortable="true">
+        </PropertyColumn>
+        <PropertyColumn Property="@(dto => dto.SeniorityLevel)" Title="Seniority" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.IsActive)" Title="Active" Sortable="true" />
 
         <TemplateColumn Title="Actions" Align="Align.End">
-            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit User" OnClick="@(() => OpenEditUserDialogAsync(context))"></FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Appearance="Appearance.Stealth" Title="Edit Details" OnClick="@(() => OpenEditUserDialogAsync(context))"></FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Money())" Appearance="Appearance.Stealth" Title="Edit Financials" OnClick="@(() => OpenEditUserFinancialsDialogAsync(context))"></FluentButton>
         </TemplateColumn>
     </FluentDataGrid>
 
@@ -83,6 +90,49 @@ else
             catch (Exception ex)
             {
                 ToastService.ShowError($"Failed to update user: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task OpenEditUserFinancialsDialogAsync(AppUserDto userToEdit)
+    {
+        var financialsDto = new UpdateAppUserFinancialsDto
+        {
+            GrossMonthlyWage = userToEdit.GrossMonthlyWage,
+            // AppUserDto.SeniorityLevel is string, UpdateAppUserFinancialsDto.SeniorityLevel is SeniorityLevelEnum?
+            // Need to parse it back.
+            SeniorityLevel = !string.IsNullOrEmpty(userToEdit.SeniorityLevel)
+                             ? Enum.TryParse<SeniorityLevelEnum>(userToEdit.SeniorityLevel, true, out var parsedLevel)
+                               ? parsedLevel
+                               : (SeniorityLevelEnum?)null
+                             : null
+        };
+
+        var dialog = await DialogService.ShowDialogAsync<UserFinancialsDialog>(financialsDto, new DialogParameters()
+        {
+            Title = $"Edit Financials for {userToEdit.Name}",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true
+        });
+
+        var result = await dialog.Result;
+
+        if (!result.Cancelled && result.Data is not null)
+        {
+            var updatedFinancials = (UpdateAppUserFinancialsDto)result.Data;
+            try
+            {
+                await AppUserService.UpdateFinancialDataAsync(userToEdit.Id, updatedFinancials);
+                ToastService.ShowSuccess($"Financial data for '{userToEdit.Name}' was updated successfully.");
+                await RefreshGridDataAsync(); // Refresh grid to show new data
+            }
+            catch (KeyNotFoundException knfEx)
+            {
+                ToastService.ShowError($"User '{userToEdit.Name}' not found: {knfEx.Message}");
+            }
+            catch (Exception ex)
+            {
+                ToastService.ShowError($"Failed to update financial data for '{userToEdit.Name}': {ex.Message}");
             }
         }
     }

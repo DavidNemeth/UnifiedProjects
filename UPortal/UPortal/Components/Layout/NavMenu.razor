@@ -34,6 +34,7 @@
                 <AuthorizeView Policy="@PermissionPolicies.AssignRoles" Context="assignRolesContext">
                     <FluentNavLink Href="/admin/user-roles" Icon="@(new Icons.Regular.Size20.PersonTag())">User Role Assignments</FluentNavLink>
                 </AuthorizeView>
+                <FluentNavLink Href="/admin/seniority-rates" Icon="@(new Icons.Regular.Size20.BranchCompare())" IconColor="Color.Accent">Seniority Rates</FluentNavLink>
             </FluentNavGroup>
         </Authorized>
     </AuthorizeView>

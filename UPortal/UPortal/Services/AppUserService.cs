@@ -42,8 +42,8 @@ namespace UPortal.Services
                 AzureAdObjectId = u.AzureAdObjectId,
                 LocationId = u.LocationId,
                 LocationName = u.Location != null ? u.Location.Name : string.Empty,
-                GrossMonthlyWage = u.GrossMonthlyWage, // New field
-                SeniorityLevel = u.SeniorityLevel?.ToString(), // New field
+                GrossMonthlyWage = u.GrossMonthlyWage,
+                SeniorityLevel = u.SeniorityLevel?.ToString(), 
                 Roles = u.UserRoles.Select(ur => new RoleDto
                 {
                     Id = ur.Role.Id,
@@ -448,7 +448,7 @@ namespace UPortal.Services
                 LocationId = u.LocationId,
                 LocationName = u.Location?.Name ?? string.Empty,
                 GrossMonthlyWage = u.GrossMonthlyWage, 
-                SeniorityLevel = u.SeniorityLevel?.ToString(), 
+                SeniorityLevel = u.SeniorityLevel?.ToString(),
                 RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
             }).ToList();
 
