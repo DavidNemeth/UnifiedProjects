@@ -112,5 +112,24 @@ namespace UPortal.Services
         /// The task result is true if the user has the role; otherwise, false.
         /// </returns>
         Task<bool> UserHasRoleAsync(int userId, string roleName);
+
+        /// <summary>
+        /// Updates the financial data (GrossMonthlyWage, SeniorityLevel) for a specific user.
+        /// </summary>
+        /// <param name="userId">The unique identifier of the user to update.</param>
+        /// <param name="dto">A DTO containing the financial data to update.</param>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown if a user with the specified ID is not found.</exception>
+        Task UpdateFinancialDataAsync(int userId, UpdateAppUserFinancialsDto dto);
+
+        /// <summary>
+        /// Retrieves a specific application user by their unique ID.
+        /// </summary>
+        /// <param name="userId">The unique ID of the user to find.</param>
+        /// <returns>
+        /// A task that represents the asynchronous operation.
+        /// The task result contains the <see cref="AppUserDto"/> if found; otherwise, null.
+        /// </returns>
+        Task<AppUserDto?> GetUserByIdAsync(int userId);
     }
 }

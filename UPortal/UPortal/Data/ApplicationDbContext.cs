@@ -18,6 +18,7 @@ namespace UPortal.Data
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<SeniorityRate> SeniorityRates { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -65,6 +66,13 @@ namespace UPortal.Data
             modelBuilder.Entity<Role>()
                 .HasIndex(r => r.Name)
                 .IsUnique();
+
+            // Configure SeniorityRate
+            // The [Index] attribute on the SeniorityRate model handles this,
+            // but it can also be configured here explicitly if preferred.
+            // modelBuilder.Entity<SeniorityRate>()
+            //     .HasIndex(sr => sr.Level)
+            //     .IsUnique();
         }
     }
 }

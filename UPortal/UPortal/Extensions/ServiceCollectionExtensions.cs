@@ -141,6 +141,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IExternalApplicationService, ExternalApplicationService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IPermissionService, PermissionService>();
+        services.AddScoped<IFinancialService, FinancialService>();
+        services.AddScoped<ISeniorityRateService, SeniorityRateService>(); // Added SeniorityRateService registration
         services.AddSingleton<IIconService, IconService>();
 
         services.AddHttpClient();
