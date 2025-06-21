@@ -47,6 +47,17 @@
         public string LocationName { get; set; } = string.Empty;
 
         /// <summary>
+        /// Gets or sets the user's gross monthly wage. Nullable.
+        /// </summary>
+        public decimal? GrossMonthlyWage { get; set; }
+
+        /// <summary>
+        /// Gets or sets the user's seniority level as a string. Nullable.
+        /// Represents the string value of the SeniorityLevelEnum (e.g., "Junior", "Senior").
+        /// </summary>
+        public string? SeniorityLevel { get; set; }
+
+        /// <summary>
         /// Gets or sets the roles assigned to the user.
         /// </summary>
         public List<RoleDto> Roles { get; set; } = new List<RoleDto>();
@@ -81,5 +92,4 @@
     {
         public List<int> RoleIds { get; set; } = new();
     }
-
 }
