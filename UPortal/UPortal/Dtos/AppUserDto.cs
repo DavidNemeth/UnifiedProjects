@@ -1,7 +1,7 @@
 ﻿namespace UPortal.Dtos
 {
     /// <summary>
-    /// Data Transfer Object for application user details.
+    /// Data Transfer Object for Application User information, including financial details.
     /// </summary>
     public class AppUserDto
     {

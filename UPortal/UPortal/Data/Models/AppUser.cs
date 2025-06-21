@@ -1,9 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace UPortal.Data.Models
 {
     /// <summary>
-    /// Represents an application user.
+    /// Represents an application user, including their profile, roles, and financial information.
     /// </summary>
     public class AppUser
     {
@@ -13,7 +14,8 @@ namespace UPortal.Data.Models
         public int Id { get; set; }
 
         /// <summary>
-        /// Gets or sets the Azure Active Directory Object ID for the user. This is used to link the application user to their Azure AD identity.
+        /// Gets or sets the Azure Active Directory Object ID for the user.
+        /// This is used to link the application user to their Azure AD identity.
         /// </summary>
         [Required]
         public string AzureAdObjectId { get; set; }
@@ -41,10 +43,28 @@ namespace UPortal.Data.Models
         public Location Location { get; set; }
 
         /// <summary>
+        /// Gets or sets the gross monthly wage for the employee.
+        /// This field is nullable and stores the wage amount.
+        /// </summary>
+        [Column(TypeName = "decimal(18, 2)")]
+        public decimal? GrossMonthlyWage { get; set; }
+
+        /// <summary>
+        /// Gets or sets the seniority level of the employee.
+        /// This field is nullable and uses the <see cref="SeniorityLevelEnum"/>.
+        /// </summary>
+        public SeniorityLevelEnum? SeniorityLevel { get; set; }
+
+        /// <summary>
         /// Gets or sets the collection of machines assigned to this user.
         /// Initialized to an empty list to prevent null reference exceptions.
         /// </summary>
         public ICollection<Machine> Machines { get; set; } = new List<Machine>();
+
+        /// <summary>
+        /// Gets or sets the collection of roles assigned to this user.
+        /// Initialized to an empty list to prevent null reference exceptions.
+        /// </summary>
         public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
     }
 }
