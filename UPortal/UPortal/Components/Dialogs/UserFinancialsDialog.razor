@@ -27,15 +27,15 @@
             <ValidationMessage For="@(() => Content.GrossMonthlyWage)" />
 
             <FluentSelect Label="Seniority Level"
-                          @bind-Value="Content.SeniorityLevel"
-                          TOption="SeniorityLevelEnum?"
+                          Value="@(Content.SeniorityLevel?.ToString() ?? "")"
+                          ValueChanged="@OnSeniorityLevelChanged"
+                          TOption="string"
                           Style="width: 100%;">
                 @foreach (var item in seniorityLevelOptions)
                 {
-                    <FluentOption Value="@item.Value">@item.DisplayName</FluentOption>
+                    <FluentOption Value="@(item.Value?.ToString() ?? "")">@item.DisplayName</FluentOption>
                 }
             </FluentSelect>
-            <ValidationMessage For="@(() => Content.SeniorityLevel)" />
 
         </FluentStack>
     </EditForm>
@@ -85,5 +85,18 @@
     {
         Logger.LogInformation("CancelAsync called in UserFinancialsDialog for User: {UserName}. Closing dialog.", UserName);
         await Dialog.CancelAsync();
+    }
+
+    private void OnSeniorityLevelChanged(string? newValue)
+    {
+        if (Enum.TryParse<SeniorityLevelEnum>(newValue, out var enumValue))
+        {
+            Content.SeniorityLevel = enumValue;
+        }
+        else
+        {
+            Content.SeniorityLevel = null;
+        }
+        _editContext.NotifyFieldChanged(FieldIdentifier.Create(() => Content.SeniorityLevel));
     }
 }

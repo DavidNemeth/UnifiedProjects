@@ -1,14 +1,13 @@
 @page "/admin/seniority-rates"
-@attribute [Authorize(Roles = "Manager")]
-
+@attribute [Authorize(Policy = PermissionPolicies.AccessAdminPages)]
 @inject ISeniorityRateService SeniorityRateService
 @inject IDialogService DialogService
 @inject IToastService ToastService
 @inject ILogger<SeniorityRatesAdmin> Logger
 
 @using UPortal.Dtos
-@using UPortal.Data.Models // For SeniorityLevelEnum
-@using UPortal.Components.Dialogs // For SeniorityRateDialog
+@using UPortal.Data.Models 
+@using UPortal.Components.Dialogs 
 @using Microsoft.FluentUI.AspNetCore.Components
 
 
@@ -76,8 +75,7 @@ else
         {
             Title = "Add New Seniority Rate",
             PreventDismissOnOverlayClick = true,
-            PreventScroll = true,
-            Parameters = new Dictionary<string, object> { { "IsEditMode", false } }
+            PreventScroll = true,            
         });
 
         DialogResult? result = await dialog.Result;
@@ -118,8 +116,7 @@ else
         {
             Title = $"Edit Seniority Rate for {rateToEdit.Level}",
             PreventDismissOnOverlayClick = true,
-            PreventScroll = true,
-            Parameters = new Dictionary<string, object> { { "IsEditMode", true } }
+            PreventScroll = true            
         });
 
         DialogResult? result = await dialog.Result;

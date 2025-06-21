@@ -4,8 +4,8 @@
 @inject IToastService ToastService
 @using Microsoft.FluentUI.AspNetCore.Components
 @using UPortal.Dtos
-@using UPortal.Data.Models // Required for SeniorityLevelEnum if used directly, though DTO uses string
-@using UPortal.Components.Dialogs // Required for UserFinancialsDialog
+@using UPortal.Data.Models 
+@using UPortal.Components.Dialogs
 @using UPortal.Components.Pages.Admin
 
 
@@ -32,9 +32,6 @@ else
         <PropertyColumn Property="@(dto => dto.Name)" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.LocationName)" Title="Location" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.GrossMonthlyWage)" Title="Gross Wage" Sortable="true">
-            <ColumnOptions>
-                <InitialSortDirection>SortDirection.Descending</InitialSortDirection>
-            </ColumnOptions>
         </PropertyColumn>
         <PropertyColumn Property="@(dto => dto.SeniorityLevel)" Title="Seniority" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.IsActive)" Title="Active" Sortable="true" />
@@ -115,8 +112,7 @@ else
         {
             Title = $"Edit Financials for {userToEdit.Name}",
             PreventDismissOnOverlayClick = true,
-            PreventScroll = true,
-            Parameters = new Dictionary<string, object> { { "UserName", userToEdit.Name } } // Pass UserName for logging
+            PreventScroll = true
         });
 
         var result = await dialog.Result;

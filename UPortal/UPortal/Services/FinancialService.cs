@@ -1,8 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System;
 using System.Threading.Tasks;
-using UPortal.Dtos; // Required for AppUserDto if IAppUserService returns it, or direct model if used.
-                    // AppUserService returns AppUserDto which has GrossMonthlyWage.
+using UPortal.Dtos; 
 
 namespace UPortal.Services
 {
