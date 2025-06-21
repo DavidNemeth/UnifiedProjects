@@ -1,0 +1,140 @@
+@using UPortal.Data.Models
+@using UPortal.Dtos
+@using UPortal.HelperServices
+@using System.ComponentModel.DataAnnotations
+@implements IDialogContentComponent<SeniorityRateDto>
+@inject ILogger<SeniorityRateDialog> Logger
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.BranchCompare())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            @Dialog.Instance.Parameters.Title
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <EditForm EditContext="@_editContext" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+        <FluentStack Orientation="Orientation.Vertical" Gap="1.5rem">
+            <FluentSelect Label="Seniority Level"
+                          @bind-Value="SelectedLevelString"
+                          TOption="string"
+                          Disabled="@IsEditMode"
+                          Style="width: 100%;">
+                @if (IsEditMode)
+                {
+                    <FluentOption Value="@Content.Level" Selected>@Content.Level</FluentOption>
+                }
+                else
+                {
+                    @foreach (var item in seniorityLevelOptions)
+                    {
+                        <FluentOption Value="@item.Value.ToString()">@item.DisplayName</FluentOption>
+                    }
+                }
+            </FluentSelect>
+            <ValidationMessage For="@(() => Content.Level)" />
+
+            <FluentNumberField @bind-Value="Content.DailyRate"
+                               Label="Daily Rate (€)"
+                               Placeholder="Enter daily rate"
+                               Step="10"
+                               Min="0"
+                               Style="width: 100%;" />
+            <ValidationMessage For="@(() => Content.DailyRate)" />
+
+        </FluentStack>
+    </EditForm>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="@CancelAsync">Cancel</FluentButton>
+    <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" Form="EditForm" OnClick="@SaveAsync" Disabled="@(!_editContext.Validate() || (IsEditMode == false && string.IsNullOrEmpty(SelectedLevelString)) )">Save</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    private EditContext _editContext = default!;
+    private List<SelectListItem<SeniorityLevelEnum>> seniorityLevelOptions = new();
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Parameter]
+    public SeniorityRateDto Content { get; set; } = new(); // Used for both create and edit
+
+    [Parameter]
+    public bool IsEditMode { get; set; } = false;
+
+    // Helper property for FluentSelect binding when creating new
+    private string? _selectedLevelString;
+    public string? SelectedLevelString {
+        get => _selectedLevelString ?? Content.Level; // Prioritize _selectedLevelString for new, Content.Level for edit
+        set {
+            if (!IsEditMode) // Only allow setting through this for new entries
+            {
+                _selectedLevelString = value;
+                Content.Level = value ?? string.Empty; // Update Content.Level for validation and save
+                _editContext?.NotifyFieldChanged(FieldIdentifier.Create(() => Content.Level));
+            }
+        }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        Logger.LogInformation("SeniorityRateDialog initializing. IsEditMode: {IsEditMode}, Level: {Level}", IsEditMode, Content.Level);
+        _editContext = new EditContext(Content);
+
+        if (!IsEditMode)
+        {
+            // Populate for new entry; for edit, level is fixed.
+            // Using the non-nullable version of GetSelectListItems as SeniorityRate.Level is not nullable.
+            var allLevels = EnumHelpers.GetSelectListItems<SeniorityLevelEnum>();
+            seniorityLevelOptions = allLevels;
+            SelectedLevelString = null; // Ensure it's clear for new entry
+        }
+        else
+        {
+            // In edit mode, Content.Level is already set and dropdown is disabled or shows only that level.
+            // We don't need to populate seniorityLevelOptions for dropdown iteration.
+        }
+        Logger.LogInformation("SeniorityRateDialog initialization completed.");
+    }
+
+    private async Task SaveAsync()
+    {
+        Logger.LogInformation("SaveAsync called in SeniorityRateDialog. IsEditMode: {IsEditMode}, Level: {Level}", IsEditMode, Content.Level);
+
+        if (!IsEditMode && string.IsNullOrEmpty(SelectedLevelString))
+        {
+            // Manually trigger validation message for dropdown if needed, though Required on DTO should handle it.
+            _editContext.NotifyValidationStateChanged(); // Force revalidation
+            Logger.LogWarning("Seniority level not selected for new rate. Save aborted.");
+            return;
+        }
+
+        if (_editContext.Validate())
+        {
+            // If creating, ensure Content.Level is set from SelectedLevelString
+            if (!IsEditMode && SelectedLevelString != null)
+            {
+                Content.Level = SelectedLevelString;
+            }
+
+            Logger.LogInformation("SeniorityRateDialog form is valid. Closing dialog with content. Level: {Level}, Rate: {Rate}", Content.Level, Content.DailyRate);
+            await Dialog.CloseAsync(Content);
+        }
+        else
+        {
+            Logger.LogWarning("SeniorityRateDialog form is invalid. Save aborted. Level: {Level}, Rate: {Rate}", Content.Level, Content.DailyRate);
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        Logger.LogInformation("CancelAsync called in SeniorityRateDialog. Closing dialog.");
+        await Dialog.CancelAsync();
+    }
+}

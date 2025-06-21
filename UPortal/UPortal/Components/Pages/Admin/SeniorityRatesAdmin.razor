@@ -1,0 +1,208 @@
+@page "/admin/seniority-rates"
+@attribute [Authorize(Roles = "Manager")]
+
+@inject ISeniorityRateService SeniorityRateService
+@inject IDialogService DialogService
+@inject IToastService ToastService
+@inject ILogger<SeniorityRatesAdmin> Logger
+
+@using UPortal.Dtos
+@using UPortal.Data.Models // For SeniorityLevelEnum
+@using UPortal.Components.Dialogs // For SeniorityRateDialog
+@using Microsoft.FluentUI.AspNetCore.Components
+
+
+<PageTitle>Seniority Rates</PageTitle>
+
+<FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="10" Style="margin-bottom: 1rem;">
+    <h1>Seniority Rate Management</h1>
+    <FluentButton IconStart="@(new Icons.Regular.Size20.AddSquare())" Appearance="Appearance.Accent" OnClick="@OpenAddSeniorityRateDialogAsync">
+        Add New Rate
+    </FluentButton>
+</FluentStack>
+
+@if (seniorityRates is null)
+{
+    <FluentProgressRing />
+    <p><em>Loading seniority rates...</em></p>
+}
+else if (!seniorityRates.Any())
+{
+    <p><em>No seniority rates defined yet. Click "Add New Rate" to create one.</em></p>
+}
+else
+{
+    <FluentDataGrid Id="seniorityRatesGrid" Items="@seniorityRates.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr" TGridItem="SeniorityRateDto">
+        <PropertyColumn Property="@(dto => dto.Level)" Title="Seniority Level" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.DailyRate)" Title="Daily Rate (€)" Sortable="true" />
+        <TemplateColumn Title="Actions" Align="Align.End">
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Appearance="Appearance.Stealth" Title="Edit Rate" OnClick="@(() => OpenEditSeniorityRateDialogAsync(context))"></FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Appearance="Appearance.Stealth" Title="Delete Rate" OnClick="@(() => ConfirmDeleteSeniorityRateAsync(context))"></FluentButton>
+        </TemplateColumn>
+    </FluentDataGrid>
+}
+
+@code {
+    private List<SeniorityRateDto>? seniorityRates;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSeniorityRatesAsync();
+    }
+
+    private async Task LoadSeniorityRatesAsync()
+    {
+        Logger.LogInformation("Loading seniority rates.");
+        try
+        {
+            var rates = await SeniorityRateService.GetAllAsync();
+            seniorityRates = rates.OrderBy(r => r.Level).ToList(); // Ensure consistent order
+            Logger.LogInformation("Successfully loaded {Count} seniority rates.", seniorityRates.Count);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading seniority rates.");
+            ToastService.ShowError("Failed to load seniority rates. Please try again.");
+            seniorityRates = new List<SeniorityRateDto>(); // Ensure not null for UI
+        }
+        StateHasChanged();
+    }
+
+    private async Task OpenAddSeniorityRateDialogAsync()
+    {
+        Logger.LogInformation("Opening dialog to add a new seniority rate.");
+        var newRateDto = new SeniorityRateDto(); // Empty DTO for a new rate
+        var dialog = await DialogService.ShowDialogAsync<SeniorityRateDialog>(newRateDto, new DialogParameters()
+        {
+            Title = "Add New Seniority Rate",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,
+            Parameters = new Dictionary<string, object> { { "IsEditMode", false } }
+        });
+
+        DialogResult? result = await dialog.Result;
+
+        if (result != null && !result.Cancelled && result.Data is SeniorityRateDto createdDto)
+        {
+            Logger.LogInformation("Dialog confirmed for adding rate. Level: {Level}, Rate: {Rate}", createdDto.Level, createdDto.DailyRate);
+            try
+            {
+                await SeniorityRateService.CreateAsync(createdDto);
+                ToastService.ShowSuccess($"Seniority rate for '{createdDto.Level}' created successfully.");
+                await LoadSeniorityRatesAsync();
+            }
+            catch (ArgumentException argEx) // Handles duplicate or invalid level from service
+            {
+                Logger.LogWarning(argEx, "Argument error creating seniority rate: {Message}", argEx.Message);
+                ToastService.ShowError(argEx.Message);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error creating seniority rate for level {Level}.", createdDto.Level);
+                ToastService.ShowError($"Failed to create seniority rate for '{createdDto.Level}'.");
+            }
+        }
+        else
+        {
+            Logger.LogInformation("Add seniority rate dialog was cancelled or returned no data.");
+        }
+    }
+
+    private async Task OpenEditSeniorityRateDialogAsync(SeniorityRateDto rateToEdit)
+    {
+        Logger.LogInformation("Opening dialog to edit seniority rate for level: {Level}", rateToEdit.Level);
+        // Clone the DTO to avoid modifying the grid's instance directly before save
+        var clonedDto = new SeniorityRateDto { Id = rateToEdit.Id, Level = rateToEdit.Level, DailyRate = rateToEdit.DailyRate };
+
+        var dialog = await DialogService.ShowDialogAsync<SeniorityRateDialog>(clonedDto, new DialogParameters()
+        {
+            Title = $"Edit Seniority Rate for {rateToEdit.Level}",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,
+            Parameters = new Dictionary<string, object> { { "IsEditMode", true } }
+        });
+
+        DialogResult? result = await dialog.Result;
+
+        if (result != null && !result.Cancelled && result.Data is SeniorityRateDto updatedDto)
+        {
+            Logger.LogInformation("Dialog confirmed for editing rate. Level: {Level}, New Rate: {Rate}", updatedDto.Level, updatedDto.DailyRate);
+            try
+            {
+                // The service's UpdateAsync takes the SeniorityLevelEnum as the key.
+                if (Enum.TryParse<SeniorityLevelEnum>(updatedDto.Level, true, out var levelEnum))
+                {
+                    await SeniorityRateService.UpdateAsync(levelEnum, updatedDto);
+                    ToastService.ShowSuccess($"Seniority rate for '{updatedDto.Level}' updated successfully.");
+                    await LoadSeniorityRatesAsync();
+                }
+                else
+                {
+                    Logger.LogError("Could not parse level string '{Level}' to enum for update.", updatedDto.Level);
+                    ToastService.ShowError($"Failed to update seniority rate: Invalid level '{updatedDto.Level}'.");
+                }
+            }
+            catch (KeyNotFoundException)
+            {
+                Logger.LogWarning("Seniority rate for level {Level} not found during update attempt.", updatedDto.Level);
+                ToastService.ShowError($"Seniority rate for '{updatedDto.Level}' not found. It might have been deleted.");
+                await LoadSeniorityRatesAsync(); // Refresh, as it might have been deleted
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error updating seniority rate for level {Level}.", updatedDto.Level);
+                ToastService.ShowError($"Failed to update seniority rate for '{updatedDto.Level}'.");
+            }
+        }
+        else
+        {
+            Logger.LogInformation("Edit seniority rate dialog was cancelled or returned no data for level: {Level}", rateToEdit.Level);
+        }
+    }
+
+    private async Task ConfirmDeleteSeniorityRateAsync(SeniorityRateDto rateToDelete)
+    {
+        Logger.LogInformation("Requesting confirmation to delete seniority rate for level: {Level}", rateToDelete.Level);
+        var dialog = await DialogService.ShowConfirmationAsync(
+            $"Are you sure you want to delete the seniority rate for '{rateToDelete.Level}' (Daily Rate: {rateToDelete.DailyRate:C})?",
+            "Yes, Delete", "No, Cancel", $"Confirm Deletion: {rateToDelete.Level}");
+
+        DialogResult? result = await dialog.Result;
+
+        if (result != null && !result.Cancelled) // User clicked "Yes, Delete"
+        {
+            Logger.LogInformation("Deletion confirmed for seniority rate level: {Level}", rateToDelete.Level);
+            try
+            {
+                if (Enum.TryParse<SeniorityLevelEnum>(rateToDelete.Level, true, out var levelEnum))
+                {
+                    var success = await SeniorityRateService.DeleteAsync(levelEnum);
+                    if (success)
+                    {
+                        ToastService.ShowSuccess($"Seniority rate for '{rateToDelete.Level}' deleted successfully.");
+                        await LoadSeniorityRatesAsync();
+                    }
+                    else
+                    {
+                        ToastService.ShowWarning($"Seniority rate for '{rateToDelete.Level}' was not found or could not be deleted.");
+                        await LoadSeniorityRatesAsync(); // Refresh in case it was deleted by another user
+                    }
+                }
+                else
+                {
+                     Logger.LogError("Could not parse level string '{Level}' to enum for deletion.", rateToDelete.Level);
+                    ToastService.ShowError($"Failed to delete seniority rate: Invalid level '{rateToDelete.Level}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting seniority rate for level {Level}.", rateToDelete.Level);
+                ToastService.ShowError($"Failed to delete seniority rate for '{rateToDelete.Level}'.");
+            }
+        }
+        else
+        {
+            Logger.LogInformation("Deletion cancelled for seniority rate level: {Level}", rateToDelete.Level);
+        }
+    }
+}

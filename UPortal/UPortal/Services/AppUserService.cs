@@ -42,6 +42,8 @@ namespace UPortal.Services
                 AzureAdObjectId = u.AzureAdObjectId,
                 LocationId = u.LocationId,
                 LocationName = u.Location != null ? u.Location.Name : string.Empty,
+                GrossMonthlyWage = u.GrossMonthlyWage, // New field
+                SeniorityLevel = u.SeniorityLevel?.ToString(), // New field
                 Roles = u.UserRoles.Select(ur => new RoleDto
                 {
                     Id = ur.Role.Id,
@@ -85,11 +87,13 @@ namespace UPortal.Services
                 AzureAdObjectId = appUser.AzureAdObjectId,
                 LocationId = appUser.LocationId,
                 LocationName = appUser.Location?.Name ?? string.Empty,
+                GrossMonthlyWage = appUser.GrossMonthlyWage, // New field
+                SeniorityLevel = appUser.SeniorityLevel?.ToString(), // New field
                 // This LINQ expression projects the collection of Role entities 
                 // into a simple list of strings containing just their names.
                 RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
             };
-            _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName} with {RoleCount} roles.", userDto.Name, userDto.Roles.Count);
+            _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName} with {RoleCount} roles.", userDto.Name, userDto.RoleNames.Count); // Corrected: userDto.Roles.Count to userDto.RoleNames.Count
             return userDto;
         }
 
@@ -443,11 +447,86 @@ namespace UPortal.Services
                 AzureAdObjectId = u.AzureAdObjectId,
                 LocationId = u.LocationId,
                 LocationName = u.Location?.Name ?? string.Empty,
+                GrossMonthlyWage = u.GrossMonthlyWage, // New field
+                SeniorityLevel = u.SeniorityLevel?.ToString(), // New field
                 RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
             }).ToList();
 
             _logger.LogInformation("GetByIdsAsync found {UserCount} matching users.", userDtos.Count);
             return userDtos;
+        }
+
+        /// <inheritdoc />
+        public async Task<AppUserDto?> GetUserByIdAsync(int userId)
+        {
+            _logger.LogInformation("GetUserByIdAsync called for UserId: {UserId}", userId);
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var appUser = await context.AppUsers
+                .Include(u => u.Location)
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (appUser == null)
+            {
+                _logger.LogWarning("User with Id: {UserId} not found.", userId);
+                return null;
+            }
+
+            var userDto = new AppUserDto
+            {
+                Id = appUser.Id,
+                Name = appUser.Name,
+                IsActive = appUser.IsActive,
+                AzureAdObjectId = appUser.AzureAdObjectId,
+                LocationId = appUser.LocationId,
+                LocationName = appUser.Location?.Name ?? string.Empty,
+                GrossMonthlyWage = appUser.GrossMonthlyWage,
+                SeniorityLevel = appUser.SeniorityLevel?.ToString(),
+                RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
+                // Roles list (full DTO) could be populated if needed, but RoleNames is usually sufficient for many contexts
+            };
+            _logger.LogInformation("GetUserByIdAsync completed for UserId: {UserId}", userId);
+            return userDto;
+        }
+
+        /// <inheritdoc />
+        public async Task UpdateFinancialDataAsync(int userId, UpdateAppUserFinancialsDto dto)
+        {
+            _logger.LogInformation("UpdateFinancialDataAsync called for UserId: {UserId} with GrossMonthlyWage: {GrossWage}, SeniorityLevel: {Seniority}",
+                userId, dto.GrossMonthlyWage, dto.SeniorityLevel);
+
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var appUser = await context.AppUsers.FindAsync(userId);
+
+            if (appUser == null)
+            {
+                _logger.LogWarning("User with ID {UserId} not found for financial update.", userId);
+                throw new KeyNotFoundException($"User with ID {userId} not found.");
+            }
+
+            // Update fields only if they are provided in the DTO
+            // A null value in the DTO means "no change" for that specific field.
+            if (dto.GrossMonthlyWage.HasValue)
+            {
+                appUser.GrossMonthlyWage = dto.GrossMonthlyWage.Value;
+            }
+
+            if (dto.SeniorityLevel.HasValue)
+            {
+                appUser.SeniorityLevel = dto.SeniorityLevel.Value;
+            }
+
+            try
+            {
+                await context.SaveChangesAsync();
+                _logger.LogInformation("Successfully updated financial data for user ID {UserId}.", userId);
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "Error updating financial data for user ID {UserId} in the database.", userId);
+                throw;
+            }
         }
     }
 }

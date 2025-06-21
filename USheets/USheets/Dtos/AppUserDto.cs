@@ -37,5 +37,16 @@
         /// Gets or sets the list of role names assigned to the user.
         /// </summary>
         public List<string> RoleNames { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Gets or sets the user's gross monthly wage. Nullable.
+        /// </summary>
+        public decimal? GrossMonthlyWage { get; set; }
+
+        /// <summary>
+        /// Gets or sets the user's seniority level as a string. Nullable.
+        /// Represents the string value of the SeniorityLevelEnum (e.g., "Junior", "Senior").
+        /// </summary>
+        public string? SeniorityLevel { get; set; }
     }
 }
