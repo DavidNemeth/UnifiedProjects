@@ -136,6 +136,25 @@ namespace UPortal.Data
                 }
                 logger.LogInformation("Admin role permission assignment complete. {AssignedCount} new permissions assigned.", assignedCount);
 
+                // --- SEED COMPANY TAXES (Example) ---
+                logger.LogInformation("Seeding Company Taxes...");
+                if (!await context.CompanyTaxes.AnyAsync())
+                {
+                    var hungarianSurtax = new CompanyTax
+                    {
+                        Name = "Szociális hozzájárulási adó",
+                        Rate = 0.13m, // 13%
+                        Description = "Hungarian social contribution tax applied on top of gross wage."
+                    };
+                    context.CompanyTaxes.Add(hungarianSurtax);
+                    await context.SaveChangesAsync();
+                    logger.LogInformation("Seeded default company tax: {TaxName}", hungarianSurtax.Name);
+                }
+                else
+                {
+                    logger.LogInformation("Company taxes already exist, skipping default tax seeding.");
+                }
+
                 // --- SEED "MANAGER" ROLE ---
                 logger.LogInformation("Seeding Manager Role...");
                 var managerRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "Manager");

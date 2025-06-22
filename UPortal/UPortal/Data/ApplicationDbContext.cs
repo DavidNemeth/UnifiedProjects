@@ -19,6 +19,7 @@ namespace UPortal.Data
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<SeniorityRate> SeniorityRates { get; set; }
+    public DbSet<CompanyTax> CompanyTaxes { get; set; } = null!;
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
