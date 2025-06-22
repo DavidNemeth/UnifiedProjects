@@ -134,6 +134,12 @@ public static class ServiceCollectionExtensions
         services.AddDbContextFactory<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString));
 
+        // Add AutoMapper
+        // It's common to scan an assembly for profiles, or define them inline.
+        // If you have a specific AutoMapperProfile class, use typeof(AutoMapperProfile).Assembly
+        services.AddAutoMapper(typeof(ServiceCollectionExtensions).Assembly);
+
+
         // Register application services
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IMachineService, MachineService>();

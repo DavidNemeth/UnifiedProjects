@@ -1,0 +1,101 @@
+@using UPortal.Dtos
+@using System.ComponentModel.DataAnnotations
+@implements IDialogContentComponent<CompanyTaxDto>
+@inject ILogger<CompanyTaxDialog> Logger
+
+<FluentDialogHeader ShowDismiss="true">
+    <FluentStack VerticalAlignment="VerticalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.Money())" />
+        <FluentLabel Typo="Typography.PaneHeader">
+            @Dialog.Instance.Parameters.Title
+        </FluentLabel>
+    </FluentStack>
+</FluentDialogHeader>
+
+<FluentDialogBody>
+    <EditForm EditContext="@_editContext" OnValidSubmit="SaveAsync" Id="companyTaxForm">
+        <DataAnnotationsValidator />
+        <FluentStack Orientation="Orientation.Vertical" Gap="1.5rem">
+            <FluentTextField @bind-Value="Content.Name"
+                             Label="Tax Name"
+                             Placeholder="Enter tax name (e.g., Social Contribution)"
+                             Required="true"
+                             Style="width: 100%;" />
+            <ValidationMessage For="@(() => Content.Name)" />
+
+            <FluentNumberField @bind-Value="Content.Rate"
+                               Label="Tax Rate (e.g., 0.13 for 13%)"
+                               Placeholder="Enter rate as a decimal"
+                               Step="0.01m"
+                               Min="0.0001m"
+                               Max="1.0000m"
+                               Format="0.00##"
+                               Required="true"
+                               Style="width: 100%;" />
+            <ValidationMessage For="@(() => Content.Rate)" />
+
+            <FluentTextField @bind-Value="Content.Description"
+                             Label="Description (Optional)"
+                             Placeholder="Enter a brief description of the tax"
+                             TextFieldType="TextFieldType.TextArea"
+                             Style="width: 100%;"
+                             Resize="TextAreaResize.Vertical"/>
+            <ValidationMessage For="@(() => Content.Description)" />
+
+        </FluentStack>
+    </EditForm>
+</FluentDialogBody>
+
+<FluentDialogFooter>
+    <FluentButton Appearance="Appearance.Neutral" OnClick="@CancelAsync">Cancel</FluentButton>
+    <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" Form="companyTaxForm" OnClick="@SaveAsync" Disabled="@(!_editContext.Validate())">Save</FluentButton>
+</FluentDialogFooter>
+
+@code {
+    private EditContext _editContext = default!;
+
+    [CascadingParameter]
+    public FluentDialog Dialog { get; set; } = default!;
+
+    [Parameter]
+    public CompanyTaxDto Content { get; set; } = new(); // Used for both create and edit
+
+    // To determine if we are editing an existing tax or creating a new one.
+    // This can be set as a parameter when the dialog is shown.
+    [Parameter]
+    public bool IsEditMode { get; set; } = false;
+
+    protected override void OnInitialized()
+    {
+        Logger.LogInformation("CompanyTaxDialog initializing. IsEditMode: {IsEditMode}, Tax Name: {Name}", IsEditMode, Content.Name);
+        _editContext = new EditContext(Content);
+
+        // If creating a new tax, ensure rate is initialized to a sensible default if desired, e.g., null or 0.
+        // For this setup, CompanyTaxDto's Rate is decimal, defaults to 0.
+        if (!IsEditMode)
+        {
+            // Content = new CompanyTaxDto(); // Re-initialize for create if not passed in cleanly
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        Logger.LogInformation("SaveAsync called in CompanyTaxDialog. Tax Name: {Name}, Rate: {Rate}", Content.Name, Content.Rate);
+
+        if (_editContext.Validate()) // Ensures all validation rules on the DTO are checked
+        {
+            Logger.LogInformation("CompanyTaxDialog form is valid. Closing dialog with content.");
+            await Dialog.CloseAsync(Content);
+        }
+        else
+        {
+            Logger.LogWarning("CompanyTaxDialog form is invalid. Save aborted. Tax Name: {Name}, Rate: {Rate}", Content.Name, Content.Rate);
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        Logger.LogInformation("CancelAsync called in CompanyTaxDialog. Closing dialog.");
+        await Dialog.CancelAsync();
+    }
+}

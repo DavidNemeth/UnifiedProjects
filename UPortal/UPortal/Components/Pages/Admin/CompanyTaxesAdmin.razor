@@ -1,0 +1,206 @@
+@page "/admin/company-taxes"
+@attribute [Authorize(Policy = PermissionPolicies.AccessAdminPages)]
+@inject ICompanyTaxService CompanyTaxService
+@inject IDialogService DialogService
+@inject IToastService ToastService
+@inject ILogger<CompanyTaxesAdmin> Logger
+
+@using UPortal.Dtos
+@using UPortal.Components.Dialogs
+@using Microsoft.FluentUI.AspNetCore.Components
+@using UPortal.Security // For PermissionPolicies
+
+<PageTitle>Company Taxes</PageTitle>
+
+<FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="10" Style="margin-bottom: 1rem;">
+    <h1>Company Tax Management</h1>
+    <AuthorizeView Policy="@PermissionPolicies.ManageSettings">
+        <Authorized>
+            <FluentButton IconStart="@(new Icons.Regular.Size20.AddSquare())" Appearance="Appearance.Accent" OnClick="@OpenAddCompanyTaxDialogAsync">
+                Add New Tax
+            </FluentButton>
+        </Authorized>
+    </AuthorizeView>
+</FluentStack>
+
+@if (companyTaxes is null)
+{
+    <FluentProgressRing />
+    <p><em>Loading company taxes...</em></p>
+}
+else if (!companyTaxes.Any())
+{
+    <p><em>No company taxes defined yet. Click "Add New Tax" to create one (if authorized).</em></p>
+}
+else
+{
+    <FluentDataGrid Id="companyTaxesGrid" Items="@companyTaxes.AsQueryable()" GridTemplateColumns="0.5fr 2fr 1fr 2fr 1fr" TGridItem="CompanyTaxDto">
+        <PropertyColumn Property="@(dto => dto.Id)" Title="ID" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.Name)" Title="Tax Name" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.Rate)" Title="Rate" Sortable="true" Format="P2" />
+        <PropertyColumn Property="@(dto => dto.Description)" Title="Description" Sortable="false" />
+        <TemplateColumn Title="Actions" Align="Align.End">
+            <AuthorizeView Policy="@PermissionPolicies.ManageSettings">
+                <Authorized>
+                    <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Appearance="Appearance.Stealth" Title="Edit Tax" OnClick="@(() => OpenEditCompanyTaxDialogAsync(context))"></FluentButton>
+                    <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Appearance="Appearance.Stealth" Title="Delete Tax" OnClick="@(() => ConfirmDeleteCompanyTaxAsync(context))"></FluentButton>
+                </Authorized>
+            </AuthorizeView>
+        </TemplateColumn>
+    </FluentDataGrid>
+}
+
+@code {
+    private List<CompanyTaxDto>? companyTaxes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCompanyTaxesAsync();
+    }
+
+    private async Task LoadCompanyTaxesAsync()
+    {
+        Logger.LogInformation("Loading company taxes.");
+        try
+        {
+            var taxes = await CompanyTaxService.GetAllAsync();
+            companyTaxes = taxes.OrderBy(t => t.Name).ToList();
+            Logger.LogInformation("Successfully loaded {Count} company taxes.", companyTaxes.Count);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading company taxes.");
+            ToastService.ShowError("Failed to load company taxes. Please try again.");
+            companyTaxes = new List<CompanyTaxDto>();
+        }
+        StateHasChanged();
+    }
+
+    [Authorize(Policy = PermissionPolicies.ManageSettings)]
+    private async Task OpenAddCompanyTaxDialogAsync()
+    {
+        Logger.LogInformation("Opening dialog to add a new company tax.");
+        var newTaxDto = new CompanyTaxDto();
+        var dialogParameters = new DialogParameters()
+        {
+            Title = "Add New Company Tax",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,
+            Width = "600px"
+        };
+        dialogParameters.Add("IsEditMode", false);
+
+
+        var dialog = await DialogService.ShowDialogAsync<CompanyTaxDialog>(newTaxDto, dialogParameters);
+        DialogResult? result = await dialog.Result;
+
+        if (result != null && !result.Cancelled && result.Data is CompanyTaxDto createdDto)
+        {
+            Logger.LogInformation("Dialog confirmed for adding tax. Name: {Name}, Rate: {Rate}", createdDto.Name, createdDto.Rate);
+            try
+            {
+                await CompanyTaxService.CreateAsync(createdDto);
+                ToastService.ShowSuccess($"Company tax '{createdDto.Name}' created successfully.");
+                await LoadCompanyTaxesAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error creating company tax '{Name}'.", createdDto.Name);
+                ToastService.ShowError($"Failed to create company tax '{createdDto.Name}': {ex.Message}");
+            }
+        }
+        else
+        {
+            Logger.LogInformation("Add company tax dialog was cancelled or returned no data.");
+        }
+    }
+
+    [Authorize(Policy = PermissionPolicies.ManageSettings)]
+    private async Task OpenEditCompanyTaxDialogAsync(CompanyTaxDto taxToEdit)
+    {
+        Logger.LogInformation("Opening dialog to edit company tax: {Name}", taxToEdit.Name);
+        // Clone DTO to avoid modifying grid's instance before save
+        var clonedDto = new CompanyTaxDto { Id = taxToEdit.Id, Name = taxToEdit.Name, Rate = taxToEdit.Rate, Description = taxToEdit.Description };
+
+        var dialogParameters = new DialogParameters()
+        {
+            Title = $"Edit Company Tax: {taxToEdit.Name}",
+            PreventDismissOnOverlayClick = true,
+            PreventScroll = true,
+            Width = "600px"
+        };
+        dialogParameters.Add("IsEditMode", true);
+        dialogParameters.Add(nameof(CompanyTaxDialog.Content), clonedDto);
+
+
+        var dialog = await DialogService.ShowDialogAsync<CompanyTaxDialog>(clonedDto, dialogParameters);
+        DialogResult? result = await dialog.Result;
+
+        if (result != null && !result.Cancelled && result.Data is CompanyTaxDto updatedDto)
+        {
+            Logger.LogInformation("Dialog confirmed for editing tax. ID: {Id}, Name: {Name}", updatedDto.Id, updatedDto.Name);
+            try
+            {
+                var success = await CompanyTaxService.UpdateAsync(updatedDto.Id, updatedDto);
+                if (success)
+                {
+                    ToastService.ShowSuccess($"Company tax '{updatedDto.Name}' updated successfully.");
+                    await LoadCompanyTaxesAsync();
+                }
+                else
+                {
+                    ToastService.ShowError($"Failed to update company tax '{updatedDto.Name}'. It might have been deleted or an error occurred.");
+                    await LoadCompanyTaxesAsync(); // Refresh
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error updating company tax '{Name}'.", updatedDto.Name);
+                ToastService.ShowError($"Failed to update company tax '{updatedDto.Name}': {ex.Message}");
+            }
+        }
+        else
+        {
+            Logger.LogInformation("Edit company tax dialog was cancelled or returned no data for: {Name}", taxToEdit.Name);
+        }
+    }
+
+    [Authorize(Policy = PermissionPolicies.ManageSettings)]
+    private async Task ConfirmDeleteCompanyTaxAsync(CompanyTaxDto taxToDelete)
+    {
+        Logger.LogInformation("Requesting confirmation to delete company tax: {Name}", taxToDelete.Name);
+        var dialog = await DialogService.ShowConfirmationAsync(
+            $"Are you sure you want to delete the company tax '{taxToDelete.Name}' (Rate: {taxToDelete.Rate:P2})?",
+            "Yes, Delete", "No, Cancel", $"Confirm Deletion: {taxToDelete.Name}");
+
+        DialogResult? result = await dialog.Result;
+
+        if (result != null && !result.Cancelled) // User clicked "Yes, Delete"
+        {
+            Logger.LogInformation("Deletion confirmed for company tax: {Name}", taxToDelete.Name);
+            try
+            {
+                var success = await CompanyTaxService.DeleteAsync(taxToDelete.Id);
+                if (success)
+                {
+                    ToastService.ShowSuccess($"Company tax '{taxToDelete.Name}' deleted successfully.");
+                    await LoadCompanyTaxesAsync();
+                }
+                else
+                {
+                    ToastService.ShowWarning($"Company tax '{taxToDelete.Name}' was not found or could not be deleted.");
+                    await LoadCompanyTaxesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error deleting company tax '{Name}'.", taxToDelete.Name);
+                ToastService.ShowError($"Failed to delete company tax '{taxToDelete.Name}': {ex.Message}");
+            }
+        }
+        else
+        {
+            Logger.LogInformation("Deletion cancelled for company tax: {Name}", taxToDelete.Name);
+        }
+    }
+}
