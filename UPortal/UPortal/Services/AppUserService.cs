@@ -13,11 +13,16 @@ namespace UPortal.Services
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<AppUserService> _logger;
+        private readonly IFinancialService _financialService;
 
-        public AppUserService(IDbContextFactory<ApplicationDbContext> contextFactory, ILogger<AppUserService> logger)
+        public AppUserService(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            ILogger<AppUserService> logger,
+            IFinancialService financialService)
         {
-            _contextFactory = contextFactory;
-            _logger = logger;
+            _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _financialService = financialService ?? throw new ArgumentNullException(nameof(financialService));
         }
 
         /// <inheritdoc />
@@ -34,27 +39,44 @@ namespace UPortal.Services
                 .OrderBy(u => u.Name)
                 .ToListAsync();
 
-            var userDtos = users.Select(u => new AppUserDto
+            var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+
+            var userDtos = new List<AppUserDto>();
+            foreach (var u in users)
             {
-                Id = u.Id,
-                Name = u.Name,
-                IsActive = u.IsActive,
-                AzureAdObjectId = u.AzureAdObjectId,
-                LocationId = u.LocationId,
-                LocationName = u.Location != null ? u.Location.Name : string.Empty,
-                GrossMonthlyWage = u.GrossMonthlyWage,
-                SeniorityLevel = u.SeniorityLevel?.ToString(), 
-                Roles = u.UserRoles.Select(ur => new RoleDto
+                var dto = new AppUserDto
                 {
-                    Id = ur.Role.Id,
-                    Name = ur.Role.Name,
-                    Permissions = ur.Role.RolePermissions.Select(rp => new PermissionDto
+                    Id = u.Id,
+                    Name = u.Name,
+                    IsActive = u.IsActive,
+                    AzureAdObjectId = u.AzureAdObjectId,
+                    LocationId = u.LocationId,
+                    LocationName = u.Location != null ? u.Location.Name : string.Empty,
+                    GrossMonthlyWage = u.GrossMonthlyWage,
+                    SeniorityLevel = u.SeniorityLevel?.ToString(),
+                    Roles = u.UserRoles.Select(ur => new RoleDto
                     {
-                        Id = rp.Permission.Id,
-                        Name = rp.Permission.Name
-                    }).ToList()
-                }).ToList()
-            }).ToList();
+                        Id = ur.Role.Id,
+                        Name = ur.Role.Name,
+                        Permissions = ur.Role.RolePermissions.Select(rp => new PermissionDto
+                        {
+                            Id = rp.Permission.Id,
+                            Name = rp.Permission.Name
+                        }).ToList()
+                    }).ToList(),
+                    RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
+                };
+
+                if (u.GrossMonthlyWage.HasValue && u.GrossMonthlyWage.Value > 0)
+                {
+                    dto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(u.GrossMonthlyWage.Value, allCompanyTaxes);
+                }
+                else
+                {
+                    dto.TotalMonthlyCost = 0m; // Or matching FinancialService's behavior for non-positive wage
+                }
+                userDtos.Add(dto);
+            }
 
             _logger.LogInformation("GetAllAsync completed, returning {UserCount} users.", userDtos.Count);
             return userDtos;
@@ -65,11 +87,10 @@ namespace UPortal.Services
         {
             _logger.LogInformation("GetByAzureAdObjectIdAsync called with AzureAdObjectId: {AzureAdObjectId}", azureAdObjectId);
             await using var context = await _contextFactory.CreateDbContextAsync();
-            // This query eagerly loads all the necessary related data in a single database round-trip.
             var appUser = await context.AppUsers
-                .Include(u => u.Location)       // Include the user's Location entity
-                .Include(u => u.UserRoles)      // Then include the join table entities (UserRole)
-                    .ThenInclude(ur => ur.Role) // And for each of those, include the final Role entity
+                .Include(u => u.Location)
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
                 .FirstOrDefaultAsync(u => u.AzureAdObjectId == azureAdObjectId);
 
             if (appUser == null)
@@ -78,7 +99,6 @@ namespace UPortal.Services
                 return null;
             }
 
-            // Map the rich database entity to the lean DTO for the API response.
             var userDto = new AppUserDto
             {
                 Id = appUser.Id,
@@ -87,13 +107,22 @@ namespace UPortal.Services
                 AzureAdObjectId = appUser.AzureAdObjectId,
                 LocationId = appUser.LocationId,
                 LocationName = appUser.Location?.Name ?? string.Empty,
-                GrossMonthlyWage = appUser.GrossMonthlyWage, // New field
-                SeniorityLevel = appUser.SeniorityLevel?.ToString(), // New field
-                // This LINQ expression projects the collection of Role entities 
-                // into a simple list of strings containing just their names.
+                GrossMonthlyWage = appUser.GrossMonthlyWage,
+                SeniorityLevel = appUser.SeniorityLevel?.ToString(),
                 RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
             };
-            _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName} with {RoleCount} roles.", userDto.Name, userDto.RoleNames.Count); // Corrected: userDto.Roles.Count to userDto.RoleNames.Count
+
+            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
+            {
+                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                userDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
+            }
+            else
+            {
+                userDto.TotalMonthlyCost = 0m;
+            }
+
+            _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName} with {RoleCount} roles.", userDto.Name, userDto.RoleNames.Count);
             return userDto;
         }
 
@@ -124,17 +153,30 @@ namespace UPortal.Services
             try
             {
                 appUser = await context.AppUsers
+                    .Include(u => u.Location) // Include location for DTO mapping
                     .FirstOrDefaultAsync(u => u.AzureAdObjectId == azureAdObjectId);
 
                 if (appUser == null)
                 {
                     _logger.LogInformation("User with AzureAdObjectId: {AzureAdObjectId} not found. Creating new user.", azureAdObjectId);
+                    // Ensure default LocationId is valid or handle it gracefully
+                    var defaultLocationId = 1; // Assuming 1 is a valid default LocationId
+                    var defaultLocation = await context.Locations.FindAsync(defaultLocationId);
+                    if (defaultLocation == null)
+                    {
+                        _logger.LogWarning("Default LocationId {DefaultLocationId} not found. User will be created without a valid location initially.", defaultLocationId);
+                        // Fallback or error, depending on requirements. For now, let it be null if not found.
+                        // Or throw an exception if a location is strictly required.
+                        // For simplicity, let's assume LocationId = 1 is always available.
+                    }
+
                     appUser = new AppUser
                     {
                         AzureAdObjectId = azureAdObjectId,
                         Name = name,
                         IsActive = true,
-                        LocationId = 1
+                        LocationId = defaultLocationId,
+                        Location = defaultLocation // Associate the fetched location
                     };
                     context.AppUsers.Add(appUser);
                     await context.SaveChangesAsync();
@@ -143,21 +185,17 @@ namespace UPortal.Services
                 else
                 {
                     _logger.LogInformation("User with AzureAdObjectId: {AzureAdObjectId} found with Id: {UserId}. Verifying if update is needed.", azureAdObjectId, appUser.Id);
-
-                    // Check if the name from the token is different from the name in the database.
                     if (appUser.Name != name)
                     {
                         _logger.LogInformation("User's name has changed from '{OldName}' to '{NewName}'. Updating.", appUser.Name, name);
-                        appUser.Name = name; // Update the name property
-                        await context.SaveChangesAsync(); // Save the change to the database
+                        appUser.Name = name;
+                        await context.SaveChangesAsync();
                         _logger.LogInformation("User's name updated successfully.");
                     }
-                }
-
-                if (appUser.LocationId != 0 && appUser.Location == null)
-                {
-                    _logger.LogInformation("Loading location for UserId: {UserId}, LocationId: {LocationId}", appUser.Id, appUser.LocationId);
-                    appUser.Location = await context.Locations.FindAsync(appUser.LocationId);
+                    if (appUser.Location == null && appUser.LocationId != 0) // Ensure location is loaded if LocationId is set
+                    {
+                        appUser.Location = await context.Locations.FindAsync(appUser.LocationId);
+                    }
                 }
             }
             catch (DbUpdateException ex)
@@ -178,8 +216,21 @@ namespace UPortal.Services
                 IsActive = appUser.IsActive,
                 AzureAdObjectId = appUser.AzureAdObjectId,
                 LocationId = appUser.LocationId,
-                LocationName = appUser.Location != null ? appUser.Location.Name : string.Empty
+                LocationName = appUser.Location?.Name ?? string.Empty, // Use appUser.Location
+                GrossMonthlyWage = appUser.GrossMonthlyWage,
+                SeniorityLevel = appUser.SeniorityLevel?.ToString()
             };
+
+            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
+            {
+                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                resultDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
+            }
+            else
+            {
+                resultDto.TotalMonthlyCost = 0m;
+            }
+
             _logger.LogInformation("CreateOrUpdateUserFromAzureAdAsync completed for UserId: {UserId}, Name: {UserName}", resultDto.Id, resultDto.Name);
             return resultDto;
         }
@@ -439,18 +490,33 @@ namespace UPortal.Services
                     .ThenInclude(ur => ur.Role)
                 .ToListAsync();
 
-            var userDtos = users.Select(u => new AppUserDto
+            var allCompanyTaxes = await context.CompanyTaxes.ToListAsync(); // Fetch once
+            var userDtos = new List<AppUserDto>();
+            foreach (var u in users)
             {
-                Id = u.Id,
-                Name = u.Name,
-                IsActive = u.IsActive,
-                AzureAdObjectId = u.AzureAdObjectId,
-                LocationId = u.LocationId,
-                LocationName = u.Location?.Name ?? string.Empty,
-                GrossMonthlyWage = u.GrossMonthlyWage, 
-                SeniorityLevel = u.SeniorityLevel?.ToString(),
-                RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
-            }).ToList();
+                var dto = new AppUserDto
+                {
+                    Id = u.Id,
+                    Name = u.Name,
+                    IsActive = u.IsActive,
+                    AzureAdObjectId = u.AzureAdObjectId,
+                    LocationId = u.LocationId,
+                    LocationName = u.Location?.Name ?? string.Empty,
+                    GrossMonthlyWage = u.GrossMonthlyWage,
+                    SeniorityLevel = u.SeniorityLevel?.ToString(),
+                    RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
+                };
+
+                if (u.GrossMonthlyWage.HasValue && u.GrossMonthlyWage.Value > 0)
+                {
+                    dto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(u.GrossMonthlyWage.Value, allCompanyTaxes);
+                }
+                else
+                {
+                    dto.TotalMonthlyCost = 0m;
+                }
+                userDtos.Add(dto);
+            }
 
             _logger.LogInformation("GetByIdsAsync found {UserCount} matching users.", userDtos.Count);
             return userDtos;
@@ -484,8 +550,18 @@ namespace UPortal.Services
                 GrossMonthlyWage = appUser.GrossMonthlyWage,
                 SeniorityLevel = appUser.SeniorityLevel?.ToString(),
                 RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
-                // Roles list (full DTO) could be populated if needed, but RoleNames is usually sufficient for many contexts
             };
+
+            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
+            {
+                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                userDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
+            }
+            else
+            {
+                userDto.TotalMonthlyCost = 0m;
+            }
+
             _logger.LogInformation("GetUserByIdAsync completed for UserId: {UserId}", userId);
             return userDto;
         }

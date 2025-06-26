@@ -66,6 +66,12 @@
         /// Gets or sets the list of role names assigned to the user.
         /// </summary>
         public List<string> RoleNames { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Gets or sets the calculated total monthly cost for the company for this user.
+        /// This includes gross wage and all applicable company-paid taxes. Nullable.
+        /// </summary>
+        public decimal? TotalMonthlyCost { get; set; }
     }
 
     /// <summary>
