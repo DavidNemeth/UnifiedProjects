@@ -10,13 +10,12 @@
 @using UPortal.Components.Dialogs 
 @using Microsoft.FluentUI.AspNetCore.Components
 
-
 <PageTitle>Seniority Rates</PageTitle>
 
-<FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="10" Style="margin-bottom: 1rem;">
+<FluentStack VerticalAlignment="VerticalAlignment.Center"
+             HorizontalAlignment="HorizontalAlignment.SpaceBetween">
     <h1>Seniority Rate Management</h1>
-    <FluentButton IconStart="@(new Icons.Regular.Size20.AddSquare())" Appearance="Appearance.Accent" OnClick="@OpenAddSeniorityRateDialogAsync">
-        Add New Rate
+    <FluentButton IconStart="@(new Icons.Regular.Size20.Add())" Appearance="Appearance.Accent" OnClick="@OpenAddSeniorityRateDialogAsync">
     </FluentButton>
 </FluentStack>
 
@@ -31,11 +30,11 @@ else if (!seniorityRates.Any())
 }
 else
 {
-    <FluentDataGrid Id="seniorityRatesGrid" Items="@seniorityRates.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr" TGridItem="SeniorityRateDto">
+    <FluentDataGrid Id="seniorityRatesGrid" RowSize="DataGridRowSize.Medium" Items="@seniorityRates.AsQueryable()" GridTemplateColumns="1fr 1fr 1fr" TGridItem="SeniorityRateDto">
         <PropertyColumn Property="@(dto => dto.Level)" Title="Seniority Level" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.DailyRate)" Title="Daily Rate (€)" Sortable="true" />
         <TemplateColumn Title="Actions" Align="Align.End">
-            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Appearance="Appearance.Stealth" Title="Edit Rate" OnClick="@(() => OpenEditSeniorityRateDialogAsync(context))"></FluentButton>
+            <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Title="Edit Rate" OnClick="@(() => OpenEditSeniorityRateDialogAsync(context))"></FluentButton>
             <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Appearance="Appearance.Stealth" Title="Delete Rate" OnClick="@(() => ConfirmDeleteSeniorityRateAsync(context))"></FluentButton>
         </TemplateColumn>
     </FluentDataGrid>

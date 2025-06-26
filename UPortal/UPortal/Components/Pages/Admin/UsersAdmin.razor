@@ -31,15 +31,10 @@ else
         <PropertyColumn Property="@(dto => dto.Id)" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.Name)" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.LocationName)" Title="Location" Sortable="true" />
-        <PropertyColumn Property="@(dto => dto.GrossMonthlyWage)" Title="Gross Wage" Sortable="true">
-            <ColumnOptions Align="Align.End" />
-        </PropertyColumn>
-        <PropertyColumn Property="@(dto => dto.TotalMonthlyCost)" Title="Total Monthly Cost" Sortable="true">
-            <ColumnOptions Align="Align.End" />
-        </PropertyColumn>
+        <PropertyColumn Property="@(dto => dto.GrossMonthlyWage)" Format="C" Title="Gross Wage" Sortable="true" />
+        <PropertyColumn Property="@(dto => dto.TotalMonthlyCost)" Format="C" Title="Total Monthly Cost" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.SeniorityLevel)" Title="Seniority" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.IsActive)" Title="Active" Sortable="true" />
-
         <TemplateColumn Title="Actions" Align="Align.End">
             <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Appearance="Appearance.Stealth" Title="Edit Details" OnClick="@(() => OpenEditUserDialogAsync(context))"></FluentButton>
             <FluentButton IconStart="@(new Icons.Regular.Size16.Money())" Appearance="Appearance.Stealth" Title="Edit Financials" OnClick="@(() => OpenEditUserFinancialsDialogAsync(context))"></FluentButton>

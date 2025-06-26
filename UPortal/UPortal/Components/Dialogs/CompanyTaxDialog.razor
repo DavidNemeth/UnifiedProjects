@@ -1,101 +1,101 @@
 @using UPortal.Dtos
 @using System.ComponentModel.DataAnnotations
 @implements IDialogContentComponent<CompanyTaxDto>
-@inject ILogger<CompanyTaxDialog> Logger
 
-<FluentDialogHeader ShowDismiss="true">
-    <FluentStack VerticalAlignment="VerticalAlignment.Center">
-        <FluentIcon Value="@(new Icons.Regular.Size24.Money())" />
-        <FluentLabel Typo="Typography.PaneHeader">
-            @Dialog.Instance.Parameters.Title
-        </FluentLabel>
-    </FluentStack>
-</FluentDialogHeader>
+@inject ILogger<CompanyTaxDialog> _logger
+@inject IToastService ToastService
 
-<FluentDialogBody>
-    <EditForm EditContext="@_editContext" OnValidSubmit="SaveAsync" Id="companyTaxForm">
-        <DataAnnotationsValidator />
-        <FluentStack Orientation="Orientation.Vertical" Gap="1.5rem">
-            <FluentTextField @bind-Value="Content.Name"
-                             Label="Tax Name"
-                             Placeholder="Enter tax name (e.g., Social Contribution)"
-                             Required="true"
-                             Style="width: 100%;" />
-            <ValidationMessage For="@(() => Content.Name)" />
-
-            <FluentNumberField @bind-Value="Content.Rate"
-                               Label="Tax Rate (e.g., 0.13 for 13%)"
-                               Placeholder="Enter rate as a decimal"
-                               Step="0.01m"
-                               Min="0.0001m"
-                               Max="1.0000m"
-                               Format="0.00##"
-                               Required="true"
-                               Style="width: 100%;" />
-            <ValidationMessage For="@(() => Content.Rate)" />
-
-            <FluentTextField @bind-Value="Content.Description"
-                             Label="Description (Optional)"
-                             Placeholder="Enter a brief description of the tax"
-                             TextFieldType="TextFieldType.TextArea"
-                             Style="width: 100%;"
-                             Resize="TextAreaResize.Vertical"/>
-            <ValidationMessage For="@(() => Content.Description)" />
-
+@if (_editContext is not null)
+{
+    <FluentDialogHeader ShowDismiss="true">
+        <FluentStack VerticalAlignment="VerticalAlignment.Center">
+            <FluentIcon Value="@(new Icons.Regular.Size24.Money())" />
+            <FluentLabel Typo="Typography.PaneHeader">
+                @Dialog.Instance.Parameters.Title
+            </FluentLabel>
         </FluentStack>
-    </EditForm>
-</FluentDialogBody>
+    </FluentDialogHeader>
 
-<FluentDialogFooter>
-    <FluentButton Appearance="Appearance.Neutral" OnClick="@CancelAsync">Cancel</FluentButton>
-    <FluentButton Appearance="Appearance.Accent" Type="ButtonType.Submit" Form="companyTaxForm" OnClick="@SaveAsync" Disabled="@(!_editContext.Validate())">Save</FluentButton>
-</FluentDialogFooter>
+    <FluentDialogBody>
+        <EditForm EditContext="@_editContext">
+            <DataAnnotationsValidator />
+            <FluentStack Orientation="Orientation.Vertical">
+                <FluentTextField @bind-Value="Content.Name"
+                                 Label="Tax Name"
+                                 Placeholder="Enter tax name (e.g., Social Contribution)"
+                                 Required="true"
+                                 Style="width: 100%;" />
+
+                <FluentNumberField @bind-Value="Content.Rate"
+                                   Label="Tax Rate (e.g., 0.13 for 13%)"
+                                   Placeholder="Enter rate as a decimal"
+                                   Required="true"
+                                   Style="width: 100%;" />
+
+                <FluentTextField @bind-Value="Content.Description"
+                                 Label="Description (Optional)"
+                                 Placeholder="Enter a brief description of the tax"
+                                 TextFieldType="TextFieldType.Text"
+                                 Style="width: 100%;" />
+            </FluentStack>
+        </EditForm>
+    </FluentDialogBody>
+
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Neutral" OnClick="@CancelAsync">Cancel</FluentButton>
+        <FluentButton Appearance="Appearance.Accent" OnClick="@SaveAsync" Disabled="@(!_editContext.Validate())">Save</FluentButton>
+    </FluentDialogFooter>
+}
 
 @code {
     private EditContext _editContext = default!;
 
+    /// <summary>
+    /// Gets or sets the cascading <see cref="FluentDialog"/> instance.
+    /// </summary>
     [CascadingParameter]
     public FluentDialog Dialog { get; set; } = default!;
 
+    /// <summary>
+    /// Gets or sets the content of the dialog, which is a <see cref="CompanyTaxDto"/> object.
+    /// This object is bound to the form fields.
+    /// </summary>
     [Parameter]
-    public CompanyTaxDto Content { get; set; } = new(); // Used for both create and edit
+    public CompanyTaxDto Content { get; set; } = default!;
 
-    // To determine if we are editing an existing tax or creating a new one.
-    // This can be set as a parameter when the dialog is shown.
-    [Parameter]
-    public bool IsEditMode { get; set; } = false;
-
+    /// <summary>
+    /// Initializes the dialog by creating an <see cref="EditContext"/>.
+    /// </summary>
     protected override void OnInitialized()
     {
-        Logger.LogInformation("CompanyTaxDialog initializing. IsEditMode: {IsEditMode}, Tax Name: {Name}", IsEditMode, Content.Name);
+        _logger.LogInformation("CompanyTaxDialog initializing for tax: {TaxName}", Content?.Name ?? "New Tax");
         _editContext = new EditContext(Content);
-
-        // If creating a new tax, ensure rate is initialized to a sensible default if desired, e.g., null or 0.
-        // For this setup, CompanyTaxDto's Rate is decimal, defaults to 0.
-        if (!IsEditMode)
-        {
-            // Content = new CompanyTaxDto(); // Re-initialize for create if not passed in cleanly
-        }
+        _logger.LogInformation("CompanyTaxDialog initialization completed for tax: {TaxName}", Content?.Name ?? "New Tax");
     }
 
+    /// <summary>
+    /// Handles the save action for the dialog.
+    /// Validates the form and, if valid, closes the dialog, returning the <see cref="Content"/>.
+    /// </summary>
     private async Task SaveAsync()
     {
-        Logger.LogInformation("SaveAsync called in CompanyTaxDialog. Tax Name: {Name}, Rate: {Rate}", Content.Name, Content.Rate);
-
-        if (_editContext.Validate()) // Ensures all validation rules on the DTO are checked
+        _logger.LogInformation("SaveAsync called in CompanyTaxDialog for tax: {TaxName}", Content.Name);
+        if (!_editContext.Validate())
         {
-            Logger.LogInformation("CompanyTaxDialog form is valid. Closing dialog with content.");
-            await Dialog.CloseAsync(Content);
+            _logger.LogWarning("CompanyTaxDialog form is invalid for tax: {TaxName}. Save aborted.", Content.Name);
+            return; // Stop if validation fails.
         }
-        else
-        {
-            Logger.LogWarning("CompanyTaxDialog form is invalid. Save aborted. Tax Name: {Name}, Rate: {Rate}", Content.Name, Content.Rate);
-        }
+        _logger.LogInformation("CompanyTaxDialog form is valid. Closing dialog with content for tax: {TaxName}", Content.Name);
+        await Dialog.CloseAsync(Content);
     }
 
+    /// <summary>
+    /// Handles the cancel action for the dialog.
+    /// Closes the dialog without returning any data.
+    /// </summary>
     private async Task CancelAsync()
     {
-        Logger.LogInformation("CancelAsync called in CompanyTaxDialog. Closing dialog.");
+        _logger.LogInformation("CancelAsync called in CompanyTaxDialog for tax: {TaxName}. Closing dialog.", Content?.Name ?? "New Tax");
         await Dialog.CancelAsync();
     }
 }

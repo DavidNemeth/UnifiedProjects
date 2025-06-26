@@ -14,15 +14,18 @@ namespace UPortal.Services
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ILogger<AppUserService> _logger;
         private readonly IFinancialService _financialService;
+        private readonly ICompanyTaxService _companyTaxService; // Injected ICompanyTaxService
 
         public AppUserService(
             IDbContextFactory<ApplicationDbContext> contextFactory,
             ILogger<AppUserService> logger,
-            IFinancialService financialService)
+            IFinancialService financialService,
+            ICompanyTaxService companyTaxService) 
         {
             _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _financialService = financialService ?? throw new ArgumentNullException(nameof(financialService));
+            _companyTaxService = companyTaxService ?? throw new ArgumentNullException(nameof(companyTaxService)); // Assign injected service
         }
 
         /// <inheritdoc />
@@ -39,41 +42,22 @@ namespace UPortal.Services
                 .OrderBy(u => u.Name)
                 .ToListAsync();
 
-            var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+            // Fetch taxes using the service, which returns DTOs.
+            var allCompanyTaxes = await _companyTaxService.GetAllAsync();
 
             var userDtos = new List<AppUserDto>();
             foreach (var u in users)
             {
-                var dto = new AppUserDto
-                {
-                    Id = u.Id,
-                    Name = u.Name,
-                    IsActive = u.IsActive,
-                    AzureAdObjectId = u.AzureAdObjectId,
-                    LocationId = u.LocationId,
-                    LocationName = u.Location != null ? u.Location.Name : string.Empty,
-                    GrossMonthlyWage = u.GrossMonthlyWage,
-                    SeniorityLevel = u.SeniorityLevel?.ToString(),
-                    Roles = u.UserRoles.Select(ur => new RoleDto
-                    {
-                        Id = ur.Role.Id,
-                        Name = ur.Role.Name,
-                        Permissions = ur.Role.RolePermissions.Select(rp => new PermissionDto
-                        {
-                            Id = rp.Permission.Id,
-                            Name = rp.Permission.Name
-                        }).ToList()
-                    }).ToList(),
-                    RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
-                };
+                var dto = MapUserToDto(u); // Helper method for mapping
 
                 if (u.GrossMonthlyWage.HasValue && u.GrossMonthlyWage.Value > 0)
                 {
+                    // Pass DTOs to the financial service
                     dto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(u.GrossMonthlyWage.Value, allCompanyTaxes);
                 }
                 else
                 {
-                    dto.TotalMonthlyCost = 0m; // Or matching FinancialService's behavior for non-positive wage
+                    dto.TotalMonthlyCost = 0m;
                 }
                 userDtos.Add(dto);
             }
@@ -99,22 +83,11 @@ namespace UPortal.Services
                 return null;
             }
 
-            var userDto = new AppUserDto
-            {
-                Id = appUser.Id,
-                Name = appUser.Name,
-                IsActive = appUser.IsActive,
-                AzureAdObjectId = appUser.AzureAdObjectId,
-                LocationId = appUser.LocationId,
-                LocationName = appUser.Location?.Name ?? string.Empty,
-                GrossMonthlyWage = appUser.GrossMonthlyWage,
-                SeniorityLevel = appUser.SeniorityLevel?.ToString(),
-                RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
-            };
+            var userDto = MapUserToDto(appUser);
 
             if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
             {
-                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                var allCompanyTaxes = await _companyTaxService.GetAllAsync();
                 userDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
             }
             else
@@ -125,6 +98,81 @@ namespace UPortal.Services
             _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName} with {RoleCount} roles.", userDto.Name, userDto.RoleNames.Count);
             return userDto;
         }
+
+        /// <inheritdoc />
+        public async Task<AppUserDto?> GetUserByIdAsync(int userId)
+        {
+            _logger.LogInformation("GetUserByIdAsync called for UserId: {UserId}", userId);
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            var appUser = await context.AppUsers
+                .Include(u => u.Location)
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (appUser == null)
+            {
+                _logger.LogWarning("User with Id: {UserId} not found.", userId);
+                return null;
+            }
+
+            var userDto = MapUserToDto(appUser);
+
+            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
+            {
+                var allCompanyTaxes = await _companyTaxService.GetAllAsync();
+                userDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
+            }
+            else
+            {
+                userDto.TotalMonthlyCost = 0m;
+            }
+
+            _logger.LogInformation("GetUserByIdAsync completed for UserId: {UserId}", userId);
+            return userDto;
+        }
+
+
+        // NOTE: Other methods like CreateOrUpdate, UpdateFinancialData, etc., are omitted for brevity
+        // but would follow the same pattern if they need to calculate the total cost.
+        // The core CRUD and role management operations remain unchanged.
+
+        /// <summary>
+        /// A private helper method to map an AppUser entity to an AppUserDto.
+        /// This avoids code duplication in methods that return user information.
+        /// </summary>
+        /// <param name="user">The AppUser entity to map.</param>
+        /// <returns>A new AppUserDto instance.</returns>
+        private AppUserDto MapUserToDto(AppUser user)
+        {
+            return new AppUserDto
+            {
+                Id = user.Id,
+                Name = user.Name,
+                IsActive = user.IsActive,
+                AzureAdObjectId = user.AzureAdObjectId,
+                LocationId = user.LocationId,
+                LocationName = user.Location?.Name ?? string.Empty,
+                GrossMonthlyWage = user.GrossMonthlyWage,
+                SeniorityLevel = user.SeniorityLevel?.ToString(),
+                Roles = user.UserRoles.Select(ur => new RoleDto
+                {
+                    Id = ur.Role.Id,
+                    Name = ur.Role.Name,
+                    Permissions = ur.Role.RolePermissions?.Select(rp => new PermissionDto
+                    {
+                        Id = rp.Permission.Id,
+                        Name = rp.Permission.Name
+                    }).ToList() ?? new List<PermissionDto>()
+                }).ToList(),
+                RoleNames = user.UserRoles.Select(ur => ur.Role.Name).ToList()
+            };
+        }
+
+        #region Unchanged Methods
+
+        // The following methods did not require changes related to the financial calculation
+        // and are included to provide the complete service file.
 
         /// <inheritdoc />
         public async Task<AppUserDto> CreateOrUpdateUserFromAzureAdAsync(ClaimsPrincipal userPrincipal)
@@ -159,15 +207,11 @@ namespace UPortal.Services
                 if (appUser == null)
                 {
                     _logger.LogInformation("User with AzureAdObjectId: {AzureAdObjectId} not found. Creating new user.", azureAdObjectId);
-                    // Ensure default LocationId is valid or handle it gracefully
-                    var defaultLocationId = 1; // Assuming 1 is a valid default LocationId
+                    var defaultLocationId = 1;
                     var defaultLocation = await context.Locations.FindAsync(defaultLocationId);
                     if (defaultLocation == null)
                     {
                         _logger.LogWarning("Default LocationId {DefaultLocationId} not found. User will be created without a valid location initially.", defaultLocationId);
-                        // Fallback or error, depending on requirements. For now, let it be null if not found.
-                        // Or throw an exception if a location is strictly required.
-                        // For simplicity, let's assume LocationId = 1 is always available.
                     }
 
                     appUser = new AppUser
@@ -176,7 +220,7 @@ namespace UPortal.Services
                         Name = name,
                         IsActive = true,
                         LocationId = defaultLocationId,
-                        Location = defaultLocation // Associate the fetched location
+                        Location = defaultLocation
                     };
                     context.AppUsers.Add(appUser);
                     await context.SaveChangesAsync();
@@ -192,7 +236,7 @@ namespace UPortal.Services
                         await context.SaveChangesAsync();
                         _logger.LogInformation("User's name updated successfully.");
                     }
-                    if (appUser.Location == null && appUser.LocationId != 0) // Ensure location is loaded if LocationId is set
+                    if (appUser.Location == null && appUser.LocationId != 0)
                     {
                         appUser.Location = await context.Locations.FindAsync(appUser.LocationId);
                     }
@@ -209,21 +253,11 @@ namespace UPortal.Services
                 throw;
             }
 
-            var resultDto = new AppUserDto
-            {
-                Id = appUser.Id,
-                Name = appUser.Name,
-                IsActive = appUser.IsActive,
-                AzureAdObjectId = appUser.AzureAdObjectId,
-                LocationId = appUser.LocationId,
-                LocationName = appUser.Location?.Name ?? string.Empty, // Use appUser.Location
-                GrossMonthlyWage = appUser.GrossMonthlyWage,
-                SeniorityLevel = appUser.SeniorityLevel?.ToString()
-            };
+            var resultDto = MapUserToDto(appUser);
 
             if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
             {
-                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                var allCompanyTaxes = await _companyTaxService.GetAllAsync();
                 resultDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
             }
             else
@@ -490,22 +524,11 @@ namespace UPortal.Services
                     .ThenInclude(ur => ur.Role)
                 .ToListAsync();
 
-            var allCompanyTaxes = await context.CompanyTaxes.ToListAsync(); // Fetch once
+            var allCompanyTaxes = await _companyTaxService.GetAllAsync(); // Fetch once using the service
             var userDtos = new List<AppUserDto>();
             foreach (var u in users)
             {
-                var dto = new AppUserDto
-                {
-                    Id = u.Id,
-                    Name = u.Name,
-                    IsActive = u.IsActive,
-                    AzureAdObjectId = u.AzureAdObjectId,
-                    LocationId = u.LocationId,
-                    LocationName = u.Location?.Name ?? string.Empty,
-                    GrossMonthlyWage = u.GrossMonthlyWage,
-                    SeniorityLevel = u.SeniorityLevel?.ToString(),
-                    RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
-                };
+                var dto = MapUserToDto(u);
 
                 if (u.GrossMonthlyWage.HasValue && u.GrossMonthlyWage.Value > 0)
                 {
@@ -523,50 +546,6 @@ namespace UPortal.Services
         }
 
         /// <inheritdoc />
-        public async Task<AppUserDto?> GetUserByIdAsync(int userId)
-        {
-            _logger.LogInformation("GetUserByIdAsync called for UserId: {UserId}", userId);
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var appUser = await context.AppUsers
-                .Include(u => u.Location)
-                .Include(u => u.UserRoles)
-                    .ThenInclude(ur => ur.Role)
-                .FirstOrDefaultAsync(u => u.Id == userId);
-
-            if (appUser == null)
-            {
-                _logger.LogWarning("User with Id: {UserId} not found.", userId);
-                return null;
-            }
-
-            var userDto = new AppUserDto
-            {
-                Id = appUser.Id,
-                Name = appUser.Name,
-                IsActive = appUser.IsActive,
-                AzureAdObjectId = appUser.AzureAdObjectId,
-                LocationId = appUser.LocationId,
-                LocationName = appUser.Location?.Name ?? string.Empty,
-                GrossMonthlyWage = appUser.GrossMonthlyWage,
-                SeniorityLevel = appUser.SeniorityLevel?.ToString(),
-                RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
-            };
-
-            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
-            {
-                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
-                userDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
-            }
-            else
-            {
-                userDto.TotalMonthlyCost = 0m;
-            }
-
-            _logger.LogInformation("GetUserByIdAsync completed for UserId: {UserId}", userId);
-            return userDto;
-        }
-
-        /// <inheritdoc />
         public async Task UpdateFinancialDataAsync(int userId, UpdateAppUserFinancialsDto dto)
         {
             _logger.LogInformation("UpdateFinancialDataAsync called for UserId: {UserId} with GrossMonthlyWage: {GrossWage}, SeniorityLevel: {Seniority}",
@@ -581,8 +560,6 @@ namespace UPortal.Services
                 throw new KeyNotFoundException($"User with ID {userId} not found.");
             }
 
-            // Update fields only if they are provided in the DTO
-            // A null value in the DTO means "no change" for that specific field.
             if (dto.GrossMonthlyWage.HasValue)
             {
                 appUser.GrossMonthlyWage = dto.GrossMonthlyWage.Value;
@@ -604,5 +581,6 @@ namespace UPortal.Services
                 throw;
             }
         }
+        #endregion
     }
 }

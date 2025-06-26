@@ -19,9 +19,9 @@
         <DataAnnotationsValidator />
         <FluentStack Orientation="Orientation.Vertical" Gap="1.5rem">
             <FluentNumberField @bind-Value="Content.GrossMonthlyWage"
-                               Label="Gross Monthly Wage (€)"
+                               Label="Gross Monthly Wage (Ft)"
                                Placeholder="Enter gross monthly wage"
-                               Step="100"
+                               Step="100000"
                                Min="0"
                                Style="width: 100%;" />
             <ValidationMessage For="@(() => Content.GrossMonthlyWage)" />

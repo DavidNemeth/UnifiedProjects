@@ -1,8 +1,4 @@
-using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using UPortal.Data.Models; // Required for CompanyTax
+using UPortal.Dtos;
 
 namespace UPortal.Services
 {
@@ -23,7 +19,7 @@ namespace UPortal.Services
         }
 
         /// <inheritdoc />
-        public decimal CalculateTotalMonthlyCost(decimal grossWage, IEnumerable<CompanyTax> allCompanyTaxes)
+        public decimal CalculateTotalMonthlyCost(decimal grossWage, IEnumerable<CompanyTaxDto> allCompanyTaxes)
         {
             if (grossWage <= 0)
             {
