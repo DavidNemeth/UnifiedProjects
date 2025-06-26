@@ -14,7 +14,7 @@
 
 <FluentStack VerticalAlignment="VerticalAlignment.Center" HorizontalGap="10" Style="margin-bottom: 1rem;">
     <h1>Company Tax Management</h1>
-    <AuthorizeView Policy="@PermissionPolicies.ManageSettings">
+    <AuthorizeView Context="ManageSettings" Policy="@PermissionPolicies.ManageSettings">
         <Authorized>
             <FluentButton IconStart="@(new Icons.Regular.Size20.AddSquare())" Appearance="Appearance.Accent" OnClick="@OpenAddCompanyTaxDialogAsync">
                 Add New Tax
@@ -40,7 +40,7 @@ else
         <PropertyColumn Property="@(dto => dto.Rate)" Title="Rate" Sortable="true" Format="P2" />
         <PropertyColumn Property="@(dto => dto.Description)" Title="Description" Sortable="false" />
         <TemplateColumn Title="Actions" Align="Align.End">
-            <AuthorizeView Policy="@PermissionPolicies.ManageSettings">
+            <AuthorizeView Context="ManageSettings" Policy="@PermissionPolicies.ManageSettings">
                 <Authorized>
                     <FluentButton IconStart="@(new Icons.Regular.Size16.Edit())" Appearance="Appearance.Stealth" Title="Edit Tax" OnClick="@(() => OpenEditCompanyTaxDialogAsync(context))"></FluentButton>
                     <FluentButton IconStart="@(new Icons.Regular.Size16.Delete())" Appearance="Appearance.Stealth" Title="Delete Tax" OnClick="@(() => ConfirmDeleteCompanyTaxAsync(context))"></FluentButton>

@@ -6,7 +6,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UPortal.Dtos;
 using UPortal.Services;
-using UPortal.Security; // For PermissionPolicies
+using UPortal.Security;
+using Microsoft.EntityFrameworkCore; // For PermissionPolicies
 
 namespace UPortal.Controllers
 {
