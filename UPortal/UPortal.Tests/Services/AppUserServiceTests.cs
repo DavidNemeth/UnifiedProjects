@@ -39,6 +39,7 @@ namespace UPortal.Tests.Services
         private DbContextOptions<ApplicationDbContext> _options;
         private Mock<IDbContextFactory<ApplicationDbContext>> _mockDbContextFactory;
         private Mock<ILogger<AppUserService>> _mockLogger;
+        private Mock<IFinancialService> _mockFinancialService; // Added
         private AppUserService _userService;
 
         [TestInitialize]
@@ -57,21 +58,33 @@ namespace UPortal.Tests.Services
                     context.Locations.Add(new Location { Id = 1, Name = "Default Location" });
                     context.SaveChanges();
                 }
+                 // Ensure the context is clean for AppUsers before each test
+                context.AppUsers.RemoveRange(context.AppUsers);
+                context.UserRoles.RemoveRange(context.UserRoles);
+                context.Roles.RemoveRange(context.Roles);
+                context.Permissions.RemoveRange(context.Permissions);
+                context.RolePermissions.RemoveRange(context.RolePermissions);
+                context.SaveChanges();
             }
 
             _mockDbContextFactory = new Mock<IDbContextFactory<ApplicationDbContext>>();
-            // Configure the factory to return a new context instance each time, using the same options.
             _mockDbContextFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new ApplicationDbContext(_options));
+                .ReturnsAsync(() => new ApplicationDbContext(_options)); // Factory returns new context instance
             _mockDbContextFactory.Setup(f => f.CreateDbContext())
-                .Returns(() => new ApplicationDbContext(_options));
+                .Returns(() => new ApplicationDbContext(_options)); // Factory returns new context instance
 
 
             _mockLogger = new Mock<ILogger<AppUserService>>();
-            _userService = new AppUserService(_mockDbContextFactory.Object, _mockLogger.Object);
+            _mockFinancialService = new Mock<IFinancialService>(); // Added
+
+            // Default setup for financial service, can be overridden in specific tests
+            _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(It.IsAny<int>()))
+                .ReturnsAsync(0m); // Default to 0, tests needing specific values will override
+
+            _userService = new AppUserService(_mockDbContextFactory.Object, _mockLogger.Object, _mockFinancialService.Object); // Added IFinancialService
         }
 
-        private ApplicationDbContext CreateContext() => new ApplicationDbContext(_options);
+        private ApplicationDbContext CreateContext() => new ApplicationDbContext(_options); // Returns a new context for seeding/verification
 
         // Existing tests from the original file (verified they are here)
         #region Existing AppUserService Tests
@@ -306,10 +319,176 @@ namespace UPortal.Tests.Services
             Assert.AreEqual("Admin", adminRoleDto.Name);
             Assert.AreEqual(1, adminRoleDto.Permissions.Count());
             Assert.AreEqual("ManageAll", adminRoleDto.Permissions.First().Name);
+            _mockFinancialService.Verify(fs => fs.CalculateTotalMonthlyCostAsync(user1Dto.Id), Times.Once);
+
 
             var user2Dto = result.FirstOrDefault(u => u.AzureAdObjectId == "azure2");
             Assert.IsNotNull(user2Dto);
             Assert.AreEqual(0, user2Dto.Roles.Count());
+            _mockFinancialService.Verify(fs => fs.CalculateTotalMonthlyCostAsync(user2Dto.Id), Times.Once);
         }
+
+        // --- New Tests for TotalMonthlyCost ---
+
+        [TestMethod]
+        public async Task GetAllAsync_PopulatesTotalMonthlyCost()
+        {
+            // Arrange
+            decimal expectedCostUser1 = 1200m;
+            decimal expectedCostUser2 = 1500m;
+
+            AppUser user1Entity;
+            AppUser user2Entity;
+
+            using (var context = CreateContext())
+            {
+                user1Entity = await SeedUserAsync(context, "User1", "azure1");
+                user2Entity = await SeedUserAsync(context, "User2", "azure2");
+            }
+
+            _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(user1Entity.Id)).ReturnsAsync(expectedCostUser1);
+            _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(user2Entity.Id)).ReturnsAsync(expectedCostUser2);
+
+            // Act
+            var result = await _userService.GetAllAsync();
+
+            // Assert
+            var user1Dto = result.FirstOrDefault(u => u.Id == user1Entity.Id);
+            Assert.IsNotNull(user1Dto);
+            Assert.AreEqual(expectedCostUser1, user1Dto.TotalMonthlyCost);
+
+            var user2Dto = result.FirstOrDefault(u => u.Id == user2Entity.Id);
+            Assert.IsNotNull(user2Dto);
+            Assert.AreEqual(expectedCostUser2, user2Dto.TotalMonthlyCost);
+        }
+
+        [TestMethod]
+        public async Task GetByIdsAsync_PopulatesTotalMonthlyCost()
+        {
+            // Arrange
+            decimal expectedCost = 1300m;
+            AppUser userEntity;
+            using (var context = CreateContext())
+            {
+                userEntity = await SeedUserAsync(context, "UserByIds", "azureByIds");
+            }
+            _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(userEntity.Id)).ReturnsAsync(expectedCost);
+
+            // Act
+            var result = await _userService.GetByIdsAsync(new[] { userEntity.Id });
+
+            // Assert
+            Assert.AreEqual(1, result.Count);
+            Assert.AreEqual(expectedCost, result.First().TotalMonthlyCost);
+            _mockFinancialService.Verify(fs => fs.CalculateTotalMonthlyCostAsync(userEntity.Id), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task GetUserByIdAsync_PopulatesTotalMonthlyCost()
+        {
+            // Arrange
+            decimal expectedCost = 1400m;
+            AppUser userEntity;
+            using (var context = CreateContext())
+            {
+                userEntity = await SeedUserAsync(context, "UserById", "azureById");
+            }
+            _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(userEntity.Id)).ReturnsAsync(expectedCost);
+
+            // Act
+            var resultDto = await _userService.GetUserByIdAsync(userEntity.Id);
+
+            // Assert
+            Assert.IsNotNull(resultDto);
+            Assert.AreEqual(expectedCost, resultDto.TotalMonthlyCost);
+            _mockFinancialService.Verify(fs => fs.CalculateTotalMonthlyCostAsync(userEntity.Id), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task GetByAzureAdObjectIdAsync_PopulatesTotalMonthlyCost()
+        {
+            // Arrange
+            var azureId = "testAzureIdForCost";
+            decimal expectedCost = 1550m;
+            AppUser userEntity;
+            using (var context = CreateContext())
+            {
+                userEntity = await SeedUserAsync(context, "Test User Cost", azureId);
+            }
+             _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(userEntity.Id)).ReturnsAsync(expectedCost);
+
+            // Act
+            var result = await _userService.GetByAzureAdObjectIdAsync(azureId);
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.AreEqual(expectedCost, result.TotalMonthlyCost);
+            _mockFinancialService.Verify(fs => fs.CalculateTotalMonthlyCostAsync(userEntity.Id), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task CreateOrUpdateUserFromAzureAdAsync_NewUser_PopulatesTotalMonthlyCost()
+        {
+            // Arrange
+            var azureId = "newAzureUserForCost";
+            var userName = "New User Cost Name";
+            decimal expectedCost = 1600m;
+
+            var claims = new List<Claim>
+            {
+                new Claim("http://schemas.microsoft.com/identity/claims/objectidentifier", azureId),
+                new Claim(ClaimTypes.Name, userName)
+            };
+            var userPrincipal = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuthType"));
+
+            // Setup mock to return specific cost for the user ID that will be created
+            // This requires knowing/controlling the ID, or setting up a more generic It.IsAny<int>()
+            // For simplicity, we'll use It.IsAny, assuming this test focuses on the call being made
+            // and a specific ID would be verified in a separate test or if IDs were predictable.
+            _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(It.IsAny<int>()))
+                                 .ReturnsAsync(expectedCost);
+
+            // Act
+            var resultDto = await _userService.CreateOrUpdateUserFromAzureAdAsync(userPrincipal);
+
+            // Assert
+            Assert.IsNotNull(resultDto);
+            Assert.AreEqual(expectedCost, resultDto.TotalMonthlyCost);
+            // Verify it was called for the new user's ID
+            _mockFinancialService.Verify(fs => fs.CalculateTotalMonthlyCostAsync(resultDto.Id), Times.Once);
+        }
+
+        [TestMethod]
+        public async Task CreateOrUpdateUserFromAzureAdAsync_ExistingUser_PopulatesTotalMonthlyCost()
+        {
+            // Arrange
+            var azureId = "existingUserForCost";
+            var userName = "Existing User Cost Name";
+            decimal expectedCost = 1700m;
+
+            AppUser existingUser;
+            using (var context = CreateContext())
+            {
+                existingUser = await SeedUserAsync(context, userName, azureId);
+            }
+            _mockFinancialService.Setup(fs => fs.CalculateTotalMonthlyCostAsync(existingUser.Id)).ReturnsAsync(expectedCost);
+
+            var claims = new List<Claim>
+            {
+                new Claim("http://schemas.microsoft.com/identity/claims/objectidentifier", azureId),
+                new Claim(ClaimTypes.Name, userName) // Name could be different to test update path too
+            };
+            var userPrincipal = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuthType"));
+
+            // Act
+            var resultDto = await _userService.CreateOrUpdateUserFromAzureAdAsync(userPrincipal);
+
+            // Assert
+            Assert.IsNotNull(resultDto);
+            Assert.AreEqual(existingUser.Id, resultDto.Id);
+            Assert.AreEqual(expectedCost, resultDto.TotalMonthlyCost);
+            _mockFinancialService.Verify(fs => fs.CalculateTotalMonthlyCostAsync(existingUser.Id), Times.Once);
+        }
+
     }
 }

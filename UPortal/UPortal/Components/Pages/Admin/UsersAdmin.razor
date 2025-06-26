@@ -27,11 +27,15 @@ else
     <FluentDataGrid Pagination="@pagination"
                     RowSize="@DataGridRowSize.Medium"
                     Items="@users.AsQueryable()"
-                    GridTemplateColumns="0.3fr 1.5fr 1fr 0.8fr 0.8fr 0.5fr 1.2fr" TGridItem="AppUserDto">
+                    GridTemplateColumns="0.3fr 1.5fr 1fr 0.8fr 1fr 0.8fr 0.5fr 1.2fr" TGridItem="AppUserDto">
         <PropertyColumn Property="@(dto => dto.Id)" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.Name)" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.LocationName)" Title="Location" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.GrossMonthlyWage)" Title="Gross Wage" Sortable="true">
+            <ColumnOptions Align="Align.End" />
+        </PropertyColumn>
+        <PropertyColumn Property="@(dto => dto.TotalMonthlyCost)" Title="Total Monthly Cost" Sortable="true">
+            <ColumnOptions Align="Align.End" />
         </PropertyColumn>
         <PropertyColumn Property="@(dto => dto.SeniorityLevel)" Title="Seniority" Sortable="true" />
         <PropertyColumn Property="@(dto => dto.IsActive)" Title="Active" Sortable="true" />
