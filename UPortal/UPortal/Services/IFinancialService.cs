@@ -1,4 +1,5 @@
-using System.Threading.Tasks;
+using System.Collections.Generic;
+using UPortal.Data.Models; // Required for CompanyTax
 
 namespace UPortal.Services
 {
@@ -8,11 +9,12 @@ namespace UPortal.Services
     public interface IFinancialService
     {
         /// <summary>
-        /// Calculates the total monthly cost of an employee to the company.
-        /// This includes gross wage and any applicable employer-paid taxes.
+        /// Calculates the total monthly cost based on a gross wage and a list of applicable company taxes.
+        /// This includes the gross wage plus all calculated taxes.
         /// </summary>
-        /// <param name="employeeId">The ID of the employee.</param>
-        /// <returns>The total calculated monthly cost. Returns 0 if the employee or their gross wage is not found.</returns>
-        Task<decimal> CalculateTotalMonthlyCostAsync(int employeeId);
+        /// <param name="grossWage">The gross monthly wage of the employee.</param>
+        /// <param name="allCompanyTaxes">An enumerable of all company taxes to be applied.</param>
+        /// <returns>The total calculated monthly cost. Returns the original gross wage if no taxes are applicable or if gross wage is non-positive.</returns>
+        decimal CalculateTotalMonthlyCost(decimal grossWage, IEnumerable<CompanyTax> allCompanyTaxes);
     }
 }

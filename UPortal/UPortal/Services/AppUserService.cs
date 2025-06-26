@@ -39,6 +39,8 @@ namespace UPortal.Services
                 .OrderBy(u => u.Name)
                 .ToListAsync();
 
+            var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+
             var userDtos = new List<AppUserDto>();
             foreach (var u in users)
             {
@@ -64,7 +66,15 @@ namespace UPortal.Services
                     }).ToList(),
                     RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
                 };
-                dto.TotalMonthlyCost = await _financialService.CalculateTotalMonthlyCostAsync(u.Id);
+
+                if (u.GrossMonthlyWage.HasValue && u.GrossMonthlyWage.Value > 0)
+                {
+                    dto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(u.GrossMonthlyWage.Value, allCompanyTaxes);
+                }
+                else
+                {
+                    dto.TotalMonthlyCost = 0m; // Or matching FinancialService's behavior for non-positive wage
+                }
                 userDtos.Add(dto);
             }
 
@@ -101,7 +111,17 @@ namespace UPortal.Services
                 SeniorityLevel = appUser.SeniorityLevel?.ToString(),
                 RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
             };
-            userDto.TotalMonthlyCost = await _financialService.CalculateTotalMonthlyCostAsync(appUser.Id);
+
+            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
+            {
+                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                userDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
+            }
+            else
+            {
+                userDto.TotalMonthlyCost = 0m;
+            }
+
             _logger.LogInformation("GetByAzureAdObjectIdAsync completed, returning user: {UserName} with {RoleCount} roles.", userDto.Name, userDto.RoleNames.Count);
             return userDto;
         }
@@ -200,7 +220,17 @@ namespace UPortal.Services
                 GrossMonthlyWage = appUser.GrossMonthlyWage,
                 SeniorityLevel = appUser.SeniorityLevel?.ToString()
             };
-            resultDto.TotalMonthlyCost = await _financialService.CalculateTotalMonthlyCostAsync(appUser.Id);
+
+            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
+            {
+                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                resultDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
+            }
+            else
+            {
+                resultDto.TotalMonthlyCost = 0m;
+            }
+
             _logger.LogInformation("CreateOrUpdateUserFromAzureAdAsync completed for UserId: {UserId}, Name: {UserName}", resultDto.Id, resultDto.Name);
             return resultDto;
         }
@@ -460,6 +490,7 @@ namespace UPortal.Services
                     .ThenInclude(ur => ur.Role)
                 .ToListAsync();
 
+            var allCompanyTaxes = await context.CompanyTaxes.ToListAsync(); // Fetch once
             var userDtos = new List<AppUserDto>();
             foreach (var u in users)
             {
@@ -475,7 +506,15 @@ namespace UPortal.Services
                     SeniorityLevel = u.SeniorityLevel?.ToString(),
                     RoleNames = u.UserRoles.Select(ur => ur.Role.Name).ToList()
                 };
-                dto.TotalMonthlyCost = await _financialService.CalculateTotalMonthlyCostAsync(u.Id);
+
+                if (u.GrossMonthlyWage.HasValue && u.GrossMonthlyWage.Value > 0)
+                {
+                    dto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(u.GrossMonthlyWage.Value, allCompanyTaxes);
+                }
+                else
+                {
+                    dto.TotalMonthlyCost = 0m;
+                }
                 userDtos.Add(dto);
             }
 
@@ -512,7 +551,17 @@ namespace UPortal.Services
                 SeniorityLevel = appUser.SeniorityLevel?.ToString(),
                 RoleNames = appUser.UserRoles.Select(userRole => userRole.Role.Name).ToList()
             };
-            userDto.TotalMonthlyCost = await _financialService.CalculateTotalMonthlyCostAsync(appUser.Id);
+
+            if (appUser.GrossMonthlyWage.HasValue && appUser.GrossMonthlyWage.Value > 0)
+            {
+                var allCompanyTaxes = await context.CompanyTaxes.ToListAsync();
+                userDto.TotalMonthlyCost = _financialService.CalculateTotalMonthlyCost(appUser.GrossMonthlyWage.Value, allCompanyTaxes);
+            }
+            else
+            {
+                userDto.TotalMonthlyCost = 0m;
+            }
+
             _logger.LogInformation("GetUserByIdAsync completed for UserId: {UserId}", userId);
             return userDto;
         }
